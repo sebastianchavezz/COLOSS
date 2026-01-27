@@ -1,19 +1,23 @@
 -- ===========================================================================
--- F007 Hotfix: Fix settings column reference
+-- F007 Hotfix: Fix digest() function call syntax
 -- ===========================================================================
 --
--- PROBLEEM: scan_ticket en undo_check_in gebruikten kolom 'settings'
--- maar event_settings tabel heeft kolom 'setting_value'
+-- PROBLEEM: "function digest(text, unknown) does not exist"
 --
--- OPLOSSING: Recreate functies met correcte kolom naam
+-- OORZAAK: PostgreSQL kan 'sha256' niet inferren als text type in digest() call
+-- De functie signature is: digest(data bytea, type text)
 --
--- Impact: Fixes "column settings does not exist" error
+-- OPLOSSING: Expliciet cast naar text of gebruik bytea input
+--
 -- ===========================================================================
 
--- Drop en recreate scan_ticket met fix
-DROP FUNCTION IF EXISTS scan_ticket(UUID, TEXT, TEXT, INET, TEXT);
+-- Ensure pgcrypto is installed (let PostgreSQL decide schema)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE OR REPLACE FUNCTION scan_ticket(
+-- Drop en recreate scan_ticket met correcte digest syntax
+DROP FUNCTION IF EXISTS public.scan_ticket(UUID, TEXT, TEXT, INET, TEXT);
+
+CREATE OR REPLACE FUNCTION public.scan_ticket(
   _event_id UUID,
   _token TEXT,
   _device_id TEXT DEFAULT NULL,
@@ -43,8 +47,11 @@ DECLARE
   v_participant_name TEXT;
   v_participant_email TEXT;
 BEGIN
-  -- Hash the token
-  v_token_hash := encode(extensions.digest(_token::bytea, 'sha256'::text), 'hex');
+  -- Hash the token (FIX: explicit cast to bytea and text, use extensions schema)
+  v_token_hash := encode(
+    extensions.digest(_token::bytea, 'sha256'::text),
+    'hex'
+  );
 
   -- Find ticket by token hash
   SELECT
@@ -87,13 +94,12 @@ BEGIN
     RETURN jsonb_build_object('error', 'UNAUTHORIZED', 'message', 'Must be org member to scan tickets');
   END IF;
 
-  -- Get scanning settings (FIX: use setting_value column)
+  -- Get scanning settings
   SELECT setting_value INTO v_settings
   FROM event_settings
   WHERE event_id = _event_id AND domain = 'scanning';
 
   IF v_settings IS NULL THEN
-    -- Use defaults
     v_settings := (SELECT get_default_settings()->'scanning');
   END IF;
 
@@ -226,112 +232,16 @@ EXCEPTION
 END;
 $$;
 
-COMMENT ON FUNCTION scan_ticket IS 'F007: Professional ticket scanning with rate limiting and audit trail';
-
--- Drop en recreate undo_check_in met fix
-DROP FUNCTION IF EXISTS undo_check_in(UUID, TEXT);
-
-CREATE OR REPLACE FUNCTION undo_check_in(
-  _ticket_id UUID,
-  _reason TEXT DEFAULT NULL
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_ticket RECORD;
-  v_org_id UUID;
-  v_settings JSONB;
-  v_allow_undo BOOLEAN;
-BEGIN
-  -- Auth check
-  IF auth.uid() IS NULL THEN
-    RETURN jsonb_build_object('error', 'UNAUTHORIZED', 'message', 'Authentication required');
-  END IF;
-
-  -- Get ticket
-  SELECT ti.id, ti.event_id, ti.status, e.org_id
-  INTO v_ticket
-  FROM ticket_instances ti
-  JOIN events e ON e.id = ti.event_id
-  WHERE ti.id = _ticket_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('error', 'TICKET_NOT_FOUND', 'message', 'Ticket not found');
-  END IF;
-
-  v_org_id := v_ticket.org_id;
-
-  -- Check admin/owner role
-  IF NOT (public.has_role(v_org_id, 'admin') OR public.has_role(v_org_id, 'owner')) THEN
-    RETURN jsonb_build_object('error', 'UNAUTHORIZED', 'message', 'Only admins can undo check-ins');
-  END IF;
-
-  -- Check settings (FIX: use setting_value column)
-  SELECT setting_value INTO v_settings
-  FROM event_settings
-  WHERE event_id = v_ticket.event_id AND domain = 'scanning';
-
-  IF v_settings IS NULL THEN
-    v_settings := (SELECT get_default_settings()->'scanning');
-  END IF;
-
-  v_allow_undo := COALESCE((v_settings->>'allow_undo_checkin')::boolean, false);
-
-  IF NOT v_allow_undo THEN
-    RETURN jsonb_build_object('error', 'UNDO_NOT_ALLOWED', 'message', 'Undo check-in is disabled for this event');
-  END IF;
-
-  -- Check ticket is checked_in
-  IF v_ticket.status != 'checked_in' THEN
-    RETURN jsonb_build_object('error', 'NOT_CHECKED_IN', 'message', 'Ticket is not checked in');
-  END IF;
-
-  -- Undo check-in
-  UPDATE ticket_instances
-  SET status = 'issued',
-      checked_in_at = NULL
-  WHERE id = _ticket_id;
-
-  -- Log undo in audit
-  INSERT INTO ticket_scans (
-    ticket_id, event_id, scanner_user_id,
-    scan_result, reason_code
-  ) VALUES (
-    _ticket_id, v_ticket.event_id, auth.uid(),
-    'UNDO', _reason
-  );
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'message', 'Check-in undone successfully'
-  );
-
-EXCEPTION
-  WHEN OTHERS THEN
-    RETURN jsonb_build_object('error', 'ERROR', 'message', SQLERRM);
-END;
-$$;
-
-COMMENT ON FUNCTION undo_check_in IS 'F007: Admin-only function to undo a check-in';
+COMMENT ON FUNCTION public.scan_ticket IS 'F007: Professional ticket scanning with rate limiting and audit trail';
 
 -- ===========================================================================
 -- Verification
 -- ===========================================================================
 
--- Verify functies bestaan
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'scan_ticket') THEN
-    RAISE EXCEPTION 'scan_ticket function not created';
-  END IF;
+  -- Test digest functie (use extensions schema)
+  PERFORM encode(extensions.digest('test'::bytea, 'sha256'::text), 'hex');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'undo_check_in') THEN
-    RAISE EXCEPTION 'undo_check_in function not created';
-  END IF;
-
-  RAISE NOTICE 'F007 Hotfix: Functions recreated successfully with correct settings column';
+  RAISE NOTICE 'F007 Hotfix: digest() function working correctly';
 END $$;

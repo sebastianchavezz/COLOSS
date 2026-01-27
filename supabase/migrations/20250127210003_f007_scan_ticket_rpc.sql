@@ -204,7 +204,7 @@ BEGIN
   END IF;
 
   -- Hash token (simple SHA256 for now, could use bcrypt)
-  v_token_hash := encode(digest(_token, 'sha256'), 'hex');
+  v_token_hash := encode(extensions.digest(_token::bytea, 'sha256'::text), 'hex');
 
   -- Lookup ticket (with row locking for concurrency safety)
   SELECT * INTO v_ticket
