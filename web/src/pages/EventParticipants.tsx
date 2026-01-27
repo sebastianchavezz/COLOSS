@@ -1,298 +1,595 @@
 /**
  * EventParticipants Page
- * 
- * Deelnemers tab voor event organisators.
+ *
+ * Deelnemers/Registraties tab voor event organisators.
  * Features:
- * - Lijst met alle ticket_instances (verkochte tickets)
- * - Status (issued/checked_in/void)
- * - Ticket type naam
- * - QR code
- * - Check-in timestamp
+ * - Gefilterde lijst met registraties (Atleta-style)
+ * - Filters: ticket type, status, payment, assignment
+ * - Search by email/name
+ * - CSV export
+ * - Pagination
  */
 
-import { useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
-import { Users, QrCode, CheckCircle, XCircle, Circle } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { useOutletContext, Link } from 'react-router-dom'
+import {
+    Users,
+    QrCode,
+    CheckCircle,
+    XCircle,
+    Circle,
+    Download,
+    Search,
+    Filter,
+    ChevronLeft,
+    ChevronRight,
+    Loader2
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import type { AppEvent, Organization } from '../types/supabase'
 
-// Context type van EventDetail
+// Context type from EventDetail
 interface EventContext {
     event: AppEvent
     org: Organization
     refreshEvent: () => void
 }
 
-interface TicketInstance {
+// Registration from view
+interface RegistrationRow {
     id: string
     event_id: string
-    ticket_type_id: string
-    order_id: string
-    owner_user_id: string | null
-    qr_code: string
-    status: string
-    checked_in_at: string | null
-    checked_in_by: string | null
+    participant_id: string
+    registration_status: string
+    ticket_type_id: string | null
+    order_item_id: string | null
+    bib_number: string | null
     created_at: string
-    // Joined data
-    ticket_type_name?: string
-    order_email?: string
+    updated_at: string
+    // Participant
+    email: string
+    first_name: string
+    last_name: string
+    phone: string | null
+    // Ticket Type
+    ticket_type_name: string | null
+    ticket_type_price: number | null
+    // Order
+    order_id: string | null
+    order_status: string | null
+    payment_status: string
+    has_discount: boolean
+    // Ticket Instance
+    ticket_instance_id: string | null
+    qr_code: string | null
+    ticket_status: string | null
+    checked_in_at: string | null
+    assignment_status: string
+}
+
+interface TicketType {
+    id: string
+    name: string
+}
+
+interface Filters {
+    ticket_type_id?: string
+    registration_status?: string
+    payment_status?: string
+    assignment_status?: string
+    search?: string
+}
+
+interface ListResponse {
+    total: number
+    page: number
+    page_size: number
+    pages: number
+    data: RegistrationRow[]
+    error?: string
 }
 
 export function EventParticipants() {
     const { event } = useOutletContext<EventContext>()
 
-    const [participants, setParticipants] = useState<TicketInstance[]>([])
+    // Data state
+    const [registrations, setRegistrations] = useState<RegistrationRow[]>([])
+    const [ticketTypes, setTicketTypes] = useState<TicketType[]>([])
+    const [total, setTotal] = useState(0)
+    const [pages, setPages] = useState(0)
+
+    // UI state
     const [loading, setLoading] = useState(true)
+    const [exporting, setExporting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // Fetch ticket instances
+    // Filter state
+    const [filters, setFilters] = useState<Filters>({})
+    const [page, setPage] = useState(1)
+    const [pageSize] = useState(50)
+    const [searchInput, setSearchInput] = useState('')
+
+    // Fetch ticket types for filter dropdown
     useEffect(() => {
-        async function fetchParticipants() {
+        async function fetchTicketTypes() {
             if (!event) return
-
-            console.log('[EventParticipants] Fetching tickets for event:', event.id)
-
-            // Use the helper view with explicit column selection
-            // Note: We don't query auth.users directly - email comes from orders table
-            const { data, error: fetchError } = await supabase
-                .from('ticket_instances_with_payment')
-                .select(`
-                    id,
-                    event_id,
-                    ticket_type_id,
-                    order_id,
-                    owner_user_id,
-                    qr_code,
-                    status,
-                    checked_in_at,
-                    checked_in_by,
-                    created_at,
-                    order_email,
-                    order_status,
-                    ticket_type_name,
-                    ticket_type_price,
-                    event_name
-                `)
+            const { data } = await supabase
+                .from('ticket_types')
+                .select('id, name')
                 .eq('event_id', event.id)
-                .order('created_at', { ascending: false })
-
-            if (fetchError) {
-                console.error('[EventParticipants] Error:', fetchError)
-                setError(fetchError.message)
-            } else {
-                console.log('[EventParticipants] Loaded tickets:', data?.length)
-                setParticipants(data || [])
-            }
-
-            setLoading(false)
+                .is('deleted_at', null)
+                .order('sort_order')
+            setTicketTypes(data || [])
         }
-
-        fetchParticipants()
+        fetchTicketTypes()
     }, [event?.id])
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-32">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-            </div>
-        )
+    // Fetch registrations
+    const fetchRegistrations = useCallback(async () => {
+        if (!event) return
+
+        setLoading(true)
+        setError(null)
+
+        console.log('[EventParticipants] Fetching with filters:', filters)
+
+        const { data, error: fetchError } = await supabase.rpc('get_registrations_list', {
+            _event_id: event.id,
+            _filters: filters,
+            _page: page,
+            _page_size: pageSize,
+            _sort_by: 'created_at',
+            _sort_order: 'desc'
+        })
+
+        if (fetchError) {
+            console.error('[EventParticipants] RPC Error:', fetchError)
+            setError(fetchError.message)
+            setLoading(false)
+            return
+        }
+
+        const result = data as ListResponse
+
+        if (result.error) {
+            setError(result.error)
+        } else {
+            setRegistrations(result.data || [])
+            setTotal(result.total || 0)
+            setPages(result.pages || 0)
+        }
+
+        setLoading(false)
+    }, [event?.id, filters, page, pageSize])
+
+    useEffect(() => {
+        fetchRegistrations()
+    }, [fetchRegistrations])
+
+    // Handle search with debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchInput !== (filters.search || '')) {
+                setFilters(prev => ({
+                    ...prev,
+                    search: searchInput || undefined
+                }))
+                setPage(1)
+            }
+        }, 300)
+        return () => clearTimeout(timer)
+    }, [searchInput])
+
+    // Handle filter change
+    const handleFilterChange = (key: keyof Filters, value: string | undefined) => {
+        setFilters(prev => ({
+            ...prev,
+            [key]: value || undefined
+        }))
+        setPage(1)
+    }
+
+    // Export CSV
+    const handleExport = async () => {
+        if (!event) return
+
+        setExporting(true)
+        setError(null)
+
+        try {
+            const { data, error: exportError } = await supabase.rpc('export_registrations_csv', {
+                _event_id: event.id,
+                _filters: filters
+            })
+
+            if (exportError) throw exportError
+
+            // Create CSV file and download
+            const csvContent = (data as { csv_row: string }[])
+                .map(row => row.csv_row)
+                .join('\n')
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `registrations-${event.slug}-${new Date().toISOString().split('T')[0]}.csv`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+        } catch (err: any) {
+            console.error('[EventParticipants] Export error:', err)
+            setError(err.message || 'Export failed')
+        }
+
+        setExporting(false)
     }
 
     // Stats
-    const totalTickets = participants.length
-    const checkedInCount = participants.filter(p => p.status === 'checked_in').length
-    const issuedCount = participants.filter(p => p.status === 'issued').length
-    const voidCount = participants.filter(p => p.status === 'void').length
+    const paidCount = registrations.filter(r => r.payment_status === 'paid').length
+    const assignedCount = registrations.filter(r => r.assignment_status === 'assigned').length
+
+    if (!event) {
+        return <div className="p-4 text-gray-500">Event laden...</div>
+    }
 
     return (
         <div>
             {/* Header */}
             <div className="mb-6 flex justify-between items-center">
                 <div>
-                    <h3 className="text-lg font-medium text-gray-900">Deelnemers</h3>
-                    <p className="text-sm text-gray-500">Alle uitgegeven tickets voor dit evenement.</p>
+                    <h3 className="text-lg font-medium text-gray-900">Registraties</h3>
+                    <p className="text-sm text-gray-500">
+                        {total} registratie{total !== 1 ? 's' : ''} totaal
+                    </p>
                 </div>
-                <Link
-                    to={`/scan/${event.slug}`}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-                >
-                    <QrCode className="mr-2 h-4 w-4" />
-                    Scan Tickets
-                </Link>
+                <div className="flex items-center space-x-3">
+                    <button
+                        onClick={handleExport}
+                        disabled={exporting || total === 0}
+                        className={clsx(
+                            'inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md',
+                            'border-gray-300 text-gray-700 bg-white hover:bg-gray-50',
+                            'disabled:opacity-50 disabled:cursor-not-allowed'
+                        )}
+                    >
+                        {exporting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Download className="mr-2 h-4 w-4" />
+                        )}
+                        Export CSV
+                    </button>
+                    <Link
+                        to={`/scan/${event.slug}`}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                    >
+                        <QrCode className="mr-2 h-4 w-4" />
+                        Scan Tickets
+                    </Link>
+                </div>
             </div>
 
-            {/* Stats */}
-            {totalTickets > 0 && (
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-4 mb-6">
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <Users className="h-6 w-6 text-gray-400" />
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">Totaal</dt>
-                                        <dd className="text-lg font-medium text-gray-900">{totalTickets}</dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 mb-6">
+                <StatCard
+                    icon={<Users className="h-5 w-5 text-gray-400" />}
+                    label="Totaal"
+                    value={total}
+                />
+                <StatCard
+                    icon={<CheckCircle className="h-5 w-5 text-green-400" />}
+                    label="Betaald"
+                    value={paidCount}
+                />
+                <StatCard
+                    icon={<Circle className="h-5 w-5 text-blue-400" />}
+                    label="Toegewezen"
+                    value={assignedCount}
+                />
+                <StatCard
+                    icon={<XCircle className="h-5 w-5 text-yellow-400" />}
+                    label="Niet toegewezen"
+                    value={total - assignedCount}
+                />
+            </div>
 
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <CheckCircle className="h-6 w-6 text-green-400" />
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">Ingecheckt</dt>
-                                        <dd className="text-lg font-medium text-gray-900">{checkedInCount}</dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <Circle className="h-6 w-6 text-blue-400" />
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">Geldig</dt>
-                                        <dd className="text-lg font-medium text-gray-900">{issuedCount}</dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <XCircle className="h-6 w-6 text-red-400" />
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">Ongeldig</dt>
-                                        <dd className="text-lg font-medium text-gray-900">{voidCount}</dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            {/* Filters */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="flex items-center mb-3">
+                    <Filter className="h-4 w-4 text-gray-500 mr-2" />
+                    <span className="text-sm font-medium text-gray-700">Filters</span>
                 </div>
-            )}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
+                    {/* Search */}
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Zoek op email/naam..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            className="pl-9 w-full rounded-md border-gray-300 text-sm"
+                        />
+                    </div>
+
+                    {/* Ticket Type Filter */}
+                    <select
+                        value={filters.ticket_type_id || ''}
+                        onChange={(e) => handleFilterChange('ticket_type_id', e.target.value)}
+                        className="rounded-md border-gray-300 text-sm"
+                    >
+                        <option value="">Alle tickets</option>
+                        {ticketTypes.map(tt => (
+                            <option key={tt.id} value={tt.id}>{tt.name}</option>
+                        ))}
+                    </select>
+
+                    {/* Registration Status Filter */}
+                    <select
+                        value={filters.registration_status || ''}
+                        onChange={(e) => handleFilterChange('registration_status', e.target.value)}
+                        className="rounded-md border-gray-300 text-sm"
+                    >
+                        <option value="">Alle statussen</option>
+                        <option value="confirmed">Bevestigd</option>
+                        <option value="pending">In afwachting</option>
+                        <option value="cancelled">Geannuleerd</option>
+                        <option value="waitlist">Wachtlijst</option>
+                    </select>
+
+                    {/* Payment Status Filter */}
+                    <select
+                        value={filters.payment_status || ''}
+                        onChange={(e) => handleFilterChange('payment_status', e.target.value)}
+                        className="rounded-md border-gray-300 text-sm"
+                    >
+                        <option value="">Alle betalingen</option>
+                        <option value="paid">Betaald</option>
+                        <option value="unpaid">Niet betaald</option>
+                        <option value="refunded">Terugbetaald</option>
+                    </select>
+
+                    {/* Assignment Status Filter */}
+                    <select
+                        value={filters.assignment_status || ''}
+                        onChange={(e) => handleFilterChange('assignment_status', e.target.value)}
+                        className="rounded-md border-gray-300 text-sm"
+                    >
+                        <option value="">Alle toewijzingen</option>
+                        <option value="assigned">Toegewezen</option>
+                        <option value="unassigned">Niet toegewezen</option>
+                    </select>
+                </div>
+
+                {/* Active filters indicator */}
+                {Object.values(filters).some(v => v) && (
+                    <div className="mt-3 flex items-center">
+                        <span className="text-xs text-gray-500 mr-2">
+                            Filters actief
+                        </span>
+                        <button
+                            onClick={() => {
+                                setFilters({})
+                                setSearchInput('')
+                                setPage(1)
+                            }}
+                            className="text-xs text-indigo-600 hover:text-indigo-800"
+                        >
+                            Wis alle filters
+                        </button>
+                    </div>
+                )}
+            </div>
 
             {/* Error */}
             {error && (
                 <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-3">
                     <p className="text-sm text-red-800">{error}</p>
-                    <button onClick={() => setError(null)} className="text-sm text-red-600 underline">Sluiten</button>
+                    <button onClick={() => setError(null)} className="text-sm text-red-600 underline">
+                        Sluiten
+                    </button>
                 </div>
             )}
 
-            {/* Participants List */}
-            {participants.length === 0 ? (
-                // Empty State
+            {/* Loading */}
+            {loading ? (
+                <div className="flex items-center justify-center h-32">
+                    <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                </div>
+            ) : registrations.length === 0 ? (
+                /* Empty State */
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
                     <Users className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">Geen deelnemers</h3>
-                    <p className="mt-1 text-sm text-gray-500">Er zijn nog geen tickets uitgegeven voor dit event.</p>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">Geen registraties</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                        {Object.values(filters).some(v => v)
+                            ? 'Geen registraties gevonden met deze filters.'
+                            : 'Er zijn nog geen registraties voor dit event.'
+                        }
+                    </p>
                 </div>
             ) : (
-                // Participants Table
-                <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-300">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">Email</th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Ticket Type</th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">QR Code</th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Check-in</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                            {participants.map((ticket) => (
-                                <tr key={ticket.id} className="hover:bg-gray-50">
-                                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm">
-                                        <div className="font-medium text-gray-900">{ticket.order_email || '–'}</div>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
-                                        {ticket.ticket_type_name || '–'}
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm font-mono text-gray-500">
-                                        <div className="flex items-center">
-                                            <QrCode className="mr-2 h-4 w-4" />
-                                            {ticket.qr_code.slice(0, 8)}...
-                                        </div>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                        <TicketStatusBadge status={ticket.status} />
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                                        {ticket.checked_in_at ? (
-                                            <span className="text-green-600">
-                                                {new Date(ticket.checked_in_at).toLocaleDateString('nl-NL', {
-                                                    day: 'numeric',
-                                                    month: 'short',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit'
-                                                })}
-                                            </span>
-                                        ) : (
-                                            '–'
-                                        )}
-                                    </td>
+                <>
+                    {/* Table */}
+                    <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-300">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">
+                                        Deelnemer
+                                    </th>
+                                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        Ticket
+                                    </th>
+                                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        Status
+                                    </th>
+                                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        Betaling
+                                    </th>
+                                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        Toewijzing
+                                    </th>
+                                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        Datum
+                                    </th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {registrations.map((reg) => (
+                                    <tr key={reg.id} className="hover:bg-gray-50">
+                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm">
+                                            <div className="font-medium text-gray-900">
+                                                {reg.first_name} {reg.last_name}
+                                            </div>
+                                            <div className="text-gray-500">{reg.email}</div>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
+                                            {reg.ticket_type_name || '–'}
+                                            {reg.has_discount && (
+                                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                                    Korting
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <StatusBadge status={reg.registration_status} />
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <PaymentBadge status={reg.payment_status} />
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <AssignmentBadge status={reg.assignment_status} />
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                            {new Date(reg.created_at).toLocaleDateString('nl-NL', {
+                                                day: 'numeric',
+                                                month: 'short',
+                                                year: 'numeric'
+                                            })}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Pagination */}
+                    {pages > 1 && (
+                        <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 mt-4 rounded-lg">
+                            <div className="flex flex-1 justify-between sm:hidden">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Vorige
+                                </button>
+                                <button
+                                    onClick={() => setPage(p => Math.min(pages, p + 1))}
+                                    disabled={page === pages}
+                                    className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Volgende
+                                </button>
+                            </div>
+                            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="text-sm text-gray-700">
+                                        Toont <span className="font-medium">{(page - 1) * pageSize + 1}</span> tot{' '}
+                                        <span className="font-medium">{Math.min(page * pageSize, total)}</span> van{' '}
+                                        <span className="font-medium">{total}</span> resultaten
+                                    </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <button
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        disabled={page === 1}
+                                        className="relative inline-flex items-center rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        <ChevronLeft className="h-5 w-5" />
+                                    </button>
+                                    <span className="text-sm text-gray-700">
+                                        Pagina {page} van {pages}
+                                    </span>
+                                    <button
+                                        onClick={() => setPage(p => Math.min(pages, p + 1))}
+                                        disabled={page === pages}
+                                        className="relative inline-flex items-center rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        <ChevronRight className="h-5 w-5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     )
 }
 
-/**
- * Ticket Status Badge
- */
-function TicketStatusBadge({ status }: { status: string }) {
-    const config: Record<string, { bg: string; text: string; icon: any; label: string }> = {
-        issued: {
-            bg: 'bg-blue-100',
-            text: 'text-blue-800',
-            icon: Circle,
-            label: 'Geldig'
-        },
-        checked_in: {
-            bg: 'bg-green-100',
-            text: 'text-green-800',
-            icon: CheckCircle,
-            label: 'Ingecheckt'
-        },
-        void: {
-            bg: 'bg-red-100',
-            text: 'text-red-800',
-            icon: XCircle,
-            label: 'Ongeldig'
-        },
-    }
-
-    const { bg, text, icon: Icon, label } = config[status] || config.issued
-
+// Stat Card Component
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
     return (
-        <span className={clsx('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', bg, text)}>
-            <Icon className="mr-1 h-3 w-3" />
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-4">
+                <div className="flex items-center">
+                    <div className="flex-shrink-0">{icon}</div>
+                    <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-500">{label}</p>
+                        <p className="text-xl font-semibold text-gray-900">{value}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// Status Badge
+function StatusBadge({ status }: { status: string }) {
+    const config: Record<string, { bg: string; text: string; label: string }> = {
+        confirmed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Bevestigd' },
+        pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'In afwachting' },
+        cancelled: { bg: 'bg-red-100', text: 'text-red-800', label: 'Geannuleerd' },
+        waitlist: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Wachtlijst' },
+    }
+    const { bg, text, label } = config[status] || config.pending
+    return (
+        <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', bg, text)}>
+            {label}
+        </span>
+    )
+}
+
+// Payment Badge
+function PaymentBadge({ status }: { status: string }) {
+    const config: Record<string, { bg: string; text: string; label: string }> = {
+        paid: { bg: 'bg-green-100', text: 'text-green-800', label: 'Betaald' },
+        unpaid: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Niet betaald' },
+        refunded: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Terugbetaald' },
+        cancelled: { bg: 'bg-red-100', text: 'text-red-800', label: 'Geannuleerd' },
+    }
+    const { bg, text, label } = config[status] || config.unpaid
+    return (
+        <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', bg, text)}>
+            {label}
+        </span>
+    )
+}
+
+// Assignment Badge
+function AssignmentBadge({ status }: { status: string }) {
+    const config: Record<string, { bg: string; text: string; label: string }> = {
+        assigned: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Toegewezen' },
+        unassigned: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Niet toegewezen' },
+    }
+    const { bg, text, label } = config[status] || config.unassigned
+    return (
+        <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', bg, text)}>
             {label}
         </span>
     )

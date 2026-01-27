@@ -17,6 +17,7 @@
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
 | F009 | Refund Flow | 🔴 | 0/2 | - | ⬜ |
 | F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
+| F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
 
 ## Status Legend
 
@@ -31,10 +32,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Flows | 10 |
+| Total Flows | 11 |
 | 🔴 Planned | 9 |
 | 🟡 Active | 0 |
-| 🟢 Done | 1 |
+| 🟢 Done | 2 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
@@ -54,7 +55,9 @@ F001 (User Registration)
   │      │      │                    │
   │      │      │                    ├──► F007 (Ticket Delivery)
   │      │      │                    │
-  │      │      │                    └──► F009 (Refund)
+  │      │      │                    ├──► F009 (Refund)
+  │      │      │                    │
+  │      │      │                    └──► F011 (Participants/Registrations) ✅
   │      │      │
   │      │      └──► F010 (Organizer Dashboard)
   │      │
@@ -90,6 +93,14 @@ F001 (User Registration)
 │   │   ├── plan.md
 │   │   ├── architecture.md
 │   │   └── review.md
+│   └── tests/
+├── f011-participants-registrations/
+│   ├── flow.md                    # 🟢 Done
+│   ├── sprints/
+│   │   ├── s1-plan.md
+│   │   ├── s1-architecture.md
+│   │   ├── s1-review.md
+│   │   └── s1-test-report.md
 │   └── tests/
 └── ...
 ```
