@@ -96,13 +96,13 @@ export function ScanPage() {
                     message: error.message
                 })
             } else if (data.error) {
-                // RPC returned error object
+                // RPC returned real error (UNAUTHORIZED, SCANNING_DISABLED, etc.)
                 setScanResult({
                     result: 'ERROR',
                     message: data.error + (data.message ? ': ' + data.message : '')
                 })
-            } else {
-                // Success or expected failure (ALREADY_USED, etc.)
+            } else if (data.result) {
+                // Scan result (VALID, INVALID, ALREADY_USED, etc.)
                 setScanResult(data)
 
                 // Clear input on successful scan
@@ -112,6 +112,13 @@ export function ScanPage() {
 
                 // Reload stats
                 loadStats(event.id)
+            } else {
+                // Unexpected response format
+                console.error('Unexpected response:', data)
+                setScanResult({
+                    result: 'ERROR',
+                    message: 'Unexpected response from server'
+                })
             }
 
         } catch (err: any) {
@@ -265,23 +272,33 @@ export function ScanPage() {
 function ScanResultCard({ result }: { result: ScanResult }) {
     const isSuccess = result.result === 'VALID'
     const isAlreadyUsed = result.result === 'ALREADY_USED'
-    const isError = ['INVALID', 'NOT_IN_EVENT', 'CANCELLED', 'REFUNDED', 'RATE_LIMIT_EXCEEDED', 'ERROR'].includes(
-        result.result
-    )
+    const isRateLimited = result.result === 'RATE_LIMIT_EXCEEDED'
+    const isInvalidScan = ['INVALID', 'NOT_IN_EVENT', 'CANCELLED', 'REFUNDED'].includes(result.result)
+    const isSystemError = result.result === 'ERROR'
 
     const bgColor = isSuccess
         ? 'bg-green-50 border-green-200'
         : isAlreadyUsed
         ? 'bg-yellow-50 border-yellow-200'
+        : isRateLimited
+        ? 'bg-orange-50 border-orange-200'
         : 'bg-red-50 border-red-200'
 
     const textColor = isSuccess
         ? 'text-green-800'
         : isAlreadyUsed
         ? 'text-yellow-800'
+        : isRateLimited
+        ? 'text-orange-800'
         : 'text-red-800'
 
-    const Icon = isSuccess ? CheckCircle : isAlreadyUsed ? Clock : isError ? XCircle : AlertTriangle
+    const Icon = isSuccess
+        ? CheckCircle
+        : isAlreadyUsed
+        ? Clock
+        : isRateLimited
+        ? AlertTriangle
+        : XCircle
 
     return (
         <div className={clsx('rounded-md p-4 border', bgColor)}>
@@ -290,7 +307,13 @@ function ScanResultCard({ result }: { result: ScanResult }) {
                     <Icon
                         className={clsx(
                             'h-6 w-6',
-                            isSuccess ? 'text-green-400' : isAlreadyUsed ? 'text-yellow-400' : 'text-red-400'
+                            isSuccess
+                                ? 'text-green-400'
+                                : isAlreadyUsed
+                                ? 'text-yellow-400'
+                                : isRateLimited
+                                ? 'text-orange-400'
+                                : 'text-red-400'
                         )}
                     />
                 </div>
