@@ -5,10 +5,10 @@
  * Tests the new scanning functionality against Supabase.
  *
  * Run with:
- *   node tests/integration/run-f007-scanning-tests.mjs
+ *   node .claude-flow/flows/f007-ticket-delivery/tests/integration-tests.mjs
  *
  * Or with credentials:
- *   TEST_USER_EMAIL=x TEST_USER_PASSWORD=y node tests/integration/run-f007-scanning-tests.mjs
+ *   TEST_USER_EMAIL=x TEST_USER_PASSWORD=y node .claude-flow/flows/f007-ticket-delivery/tests/integration-tests.mjs
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -355,7 +355,7 @@ if (skipped > 0 && needsAuth) {
 💡 To run authenticated tests, set environment variables:
    export TEST_USER_EMAIL=your@email.com
    export TEST_USER_PASSWORD=yourpassword
-   node tests/integration/run-f007-scanning-tests.mjs
+   node .claude-flow/flows/f007-ticket-delivery/tests/integration-tests.mjs
 `);
 }
 
