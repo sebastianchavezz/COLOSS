@@ -1,0 +1,22 @@
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Write|Edit",
+                "command": "npm run lint --fix 2>/dev/null || true",
+                "description": "Auto-format na elke edit"
+            },
+            {
+                "matcher": "Write|Edit",
+                "command": "npm test --passWithNoTests 2>&1 | head -20",
+                "description": "Run tests na elke edit"
+            }
+        ],
+        "PreCommit": [
+            {
+                "command": "npm run lint && npm test",
+                "description": "Lint en test voor commit"
+            }
+        ]
+    }
+}

@@ -1,0 +1,57 @@
+{
+  "project": {
+    "name": "COLOSS",
+    "initialized_at": "2025-01-27T00:00:00Z",
+    "last_updated": "2025-01-27T00:00:00Z"
+  },
+  "pipeline": {
+    "status": "idle",
+    "current_phase": null,
+    "phases_completed": [],
+    "current_sprint": null
+  },
+  "agents": {
+    "orchestrator": {
+      "status": "available",
+      "last_active": null
+    },
+    "pm": {
+      "status": "available",
+      "last_active": null
+    },
+    "architect": {
+      "status": "available",
+      "last_active": null
+    },
+    "backend": {
+      "status": "available",
+      "last_active": null
+    },
+    "reviewer": {
+      "status": "available",
+      "last_active": null
+    },
+    "tester": {
+      "status": "available",
+      "last_active": null
+    },
+    "supabase-tester": {
+      "status": "available",
+      "last_active": null
+    },
+    "ui": {
+      "status": "available",
+      "last_active": null
+    }
+  },
+  "sprints": {
+    "current": null,
+    "completed": [],
+    "total": 0
+  },
+  "metrics": {
+    "tasks_completed": 0,
+    "tests_passing": 0,
+    "coverage_percent": 0
+  }
+}

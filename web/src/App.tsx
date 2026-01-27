@@ -1,0 +1,96 @@
+/**
+ * App Routes Configuration
+ * 
+ * Routing structuur:
+ * /login                           - Login pagina
+ * /                                - Redirect naar /org/demo/events
+ * /org/:orgSlug                    - Org container (Layout)
+ * /org/:orgSlug/events             - Events lijst
+ * /org/:orgSlug/events/new         - Nieuw event aanmaken
+ * /org/:orgSlug/events/:eventSlug  - Event detail (met sub-routes)
+ */
+
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import ProtectedRoute from './components/ProtectedRoute'
+import { Layout } from './components/Layout'
+import { EventsList } from './pages/EventsList'
+import { EventCreate } from './pages/EventCreate'
+import {
+  EventDetail,
+  EventOverview,
+  EventProducts,
+} from './pages/EventDetail'
+import { EventSettings } from './pages/EventSettings'
+import { EventCommunication } from './pages/EventCommunication'
+import { EventTickets } from './pages/EventTickets'
+import { EventOrders } from './pages/EventOrders'
+import { EventParticipants } from './pages/EventParticipants'
+import { PublicEventCheckout } from './pages/public/PublicEventCheckout'
+import { PublicConfirm } from './pages/public/PublicConfirm'
+import Login from './pages/Login'
+import AuthCallback from './pages/AuthCallback'
+import AuthDebug from './components/AuthDebug'
+
+import { ScanPage } from './pages/ScanPage'
+import CheckIn from './pages/events/CheckIn'
+import Transfers from './pages/events/Transfers'
+
+function App() {
+  return (
+    <AuthProvider>
+      <AuthDebug />
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/e/:eventSlug" element={<PublicEventCheckout />} />
+          <Route path="/e/:eventSlug/confirm" element={<PublicConfirm />} />
+
+          {/* Protected Routes Wrapper */}
+          <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
+
+            {/* Organizer Scan Route */}
+            <Route path="/scan/:eventSlug" element={<ScanPage />} />
+
+            {/* Operations Routes (Direct Access) */}
+            <Route path="/events/:eventId/check-in" element={<CheckIn />} />
+            <Route path="/events/:eventId/transfers" element={<Transfers />} />
+
+            {/* Redirect root naar default org */}
+            <Route path="/" element={<Navigate to="/org/demo/events" replace />} />
+
+            {/* Org-scoped routes (protected by Layout) */}
+            <Route path="/org/:orgSlug" element={<Layout><Outlet /></Layout>}>
+              {/* Default redirect naar events */}
+              <Route index element={<Navigate to="events" replace />} />
+
+              {/* Events module */}
+              <Route path="events" element={<EventsList />} />
+              <Route path="events/new" element={<EventCreate />} />
+
+              {/* Event detail met sub-routes */}
+              <Route path="events/:eventSlug" element={<EventDetail />}>
+                <Route index element={<EventOverview />} />
+                <Route path="tickets" element={<EventTickets />} />
+                <Route path="orders" element={<EventOrders />} />
+                <Route path="participants" element={<EventParticipants />} />
+                <Route path="products" element={<EventProducts />} />
+                <Route path="communication" element={<EventCommunication />} />
+                <Route path="settings" element={<EventSettings />} />
+              </Route>
+
+              {/* Placeholder routes voor sidebar navigatie */}
+              <Route path="team" element={<div className="p-4 text-gray-500">Team Management - Coming soon</div>} />
+              <Route path="finance" element={<div className="p-4 text-gray-500">Finance Dashboard - Coming soon</div>} />
+              <Route path="settings" element={<div className="p-4 text-gray-500">Organisatie Instellingen - Coming soon</div>} />
+            </Route>
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}
+
+export default App
