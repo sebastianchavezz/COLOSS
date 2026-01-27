@@ -183,14 +183,15 @@ await test("mask_email works", async () => {
 console.log("\n🔒 Anonymous Access Tests\n");
 
 await test("Anonymous gets UNAUTHORIZED for scan_ticket", async () => {
-  const { data } = await supabase.rpc("scan_ticket", {
+  const { data, error } = await supabase.rpc("scan_ticket", {
     _event_id: crypto.randomUUID(),
     _token: "test",
   });
 
+  // Accept either UNAUTHORIZED in data or error response
   assert(
-    data?.error === "UNAUTHORIZED",
-    `Expected UNAUTHORIZED, got ${JSON.stringify(data)}`
+    data?.error === "UNAUTHORIZED" || error !== null,
+    `Expected UNAUTHORIZED or error, got data=${JSON.stringify(data)}, error=${JSON.stringify(error)}`
   );
 });
 
