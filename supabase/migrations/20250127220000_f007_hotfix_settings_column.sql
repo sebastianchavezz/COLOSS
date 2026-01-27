@@ -1,0 +1,337 @@
+-- ===========================================================================
+-- F007 Hotfix: Fix settings column reference
+-- ===========================================================================
+--
+-- PROBLEEM: scan_ticket en undo_check_in gebruikten kolom 'settings'
+-- maar event_settings tabel heeft kolom 'setting_value'
+--
+-- OPLOSSING: Recreate functies met correcte kolom naam
+--
+-- Impact: Fixes "column settings does not exist" error
+-- ===========================================================================
+
+-- Drop en recreate scan_ticket met fix
+DROP FUNCTION IF EXISTS scan_ticket(UUID, TEXT, TEXT, INET, TEXT);
+
+CREATE OR REPLACE FUNCTION scan_ticket(
+  _event_id UUID,
+  _token TEXT,
+  _device_id TEXT DEFAULT NULL,
+  _ip_address INET DEFAULT NULL,
+  _user_agent TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_ticket_id UUID;
+  v_ticket_type_id UUID;
+  v_ticket_status TEXT;
+  v_ticket RECORD;
+  v_token_hash TEXT;
+  v_org_id UUID;
+  v_settings JSONB;
+  v_rate_limit_per_minute INT;
+  v_rate_limit_per_device INT;
+  v_require_device_id BOOLEAN;
+  v_pii_level TEXT;
+  v_user_count INT;
+  v_device_count INT;
+  v_result TEXT;
+  v_participant_name TEXT;
+  v_participant_email TEXT;
+BEGIN
+  -- Hash the token
+  v_token_hash := encode(digest(_token, 'sha256'), 'hex');
+
+  -- Find ticket by token hash
+  SELECT
+    ti.id,
+    ti.ticket_type_id,
+    ti.event_id,
+    ti.status,
+    ti.order_id,
+    e.org_id
+  INTO v_ticket
+  FROM ticket_instances ti
+  JOIN events e ON e.id = ti.event_id
+  WHERE ti.token_hash = v_token_hash
+    AND ti.event_id = _event_id
+  FOR UPDATE SKIP LOCKED;
+
+  IF NOT FOUND THEN
+    -- Log failed scan
+    INSERT INTO ticket_scans (
+      event_id, scanner_user_id, device_id, ip_address, user_agent,
+      scan_result, reason_code
+    ) VALUES (
+      _event_id, auth.uid(), _device_id, _ip_address, _user_agent,
+      'INVALID', 'TOKEN_NOT_FOUND'
+    );
+
+    RETURN jsonb_build_object('error', 'INVALID', 'message', 'Invalid ticket token');
+  END IF;
+
+  v_ticket_id := v_ticket.id;
+  v_org_id := v_ticket.org_id;
+
+  -- Auth check
+  IF auth.uid() IS NULL THEN
+    RETURN jsonb_build_object('error', 'UNAUTHORIZED', 'message', 'Authentication required');
+  END IF;
+
+  -- Check org membership (scanner permission)
+  IF NOT public.is_org_member(v_org_id) THEN
+    RETURN jsonb_build_object('error', 'UNAUTHORIZED', 'message', 'Must be org member to scan tickets');
+  END IF;
+
+  -- Get scanning settings (FIX: use setting_value column)
+  SELECT setting_value INTO v_settings
+  FROM event_settings
+  WHERE event_id = _event_id AND domain = 'scanning';
+
+  IF v_settings IS NULL THEN
+    -- Use defaults
+    v_settings := (SELECT get_default_settings()->'scanning');
+  END IF;
+
+  -- Check if scanning enabled
+  IF (v_settings->>'enabled')::boolean = false THEN
+    RETURN jsonb_build_object('error', 'SCANNING_DISABLED', 'message', 'Scanning is disabled for this event');
+  END IF;
+
+  -- Get rate limits
+  v_rate_limit_per_minute := COALESCE((v_settings->'rate_limit'->>'per_minute')::integer, 60);
+  v_rate_limit_per_device := COALESCE((v_settings->'rate_limit'->>'per_device_per_minute')::integer, 30);
+  v_require_device_id := COALESCE((v_settings->>'require_device_id')::boolean, false);
+  v_pii_level := COALESCE(v_settings->'response'->>'pii_level', 'masked');
+
+  -- Check device_id requirement
+  IF v_require_device_id AND _device_id IS NULL THEN
+    RETURN jsonb_build_object('error', 'DEVICE_ID_REQUIRED', 'message', 'Device ID is required for scanning');
+  END IF;
+
+  -- Rate limiting (per user)
+  SELECT COUNT(*) INTO v_user_count
+  FROM ticket_scans
+  WHERE scanner_user_id = auth.uid()
+    AND event_id = _event_id
+    AND scanned_at > NOW() - INTERVAL '1 minute';
+
+  IF v_user_count >= v_rate_limit_per_minute THEN
+    INSERT INTO ticket_scans (
+      ticket_id, event_id, scanner_user_id, device_id, ip_address, user_agent,
+      scan_result, reason_code
+    ) VALUES (
+      v_ticket_id, _event_id, auth.uid(), _device_id, _ip_address, _user_agent,
+      'RATE_LIMIT_EXCEEDED', 'USER_RATE_LIMIT'
+    );
+
+    RETURN jsonb_build_object('error', 'RATE_LIMIT_EXCEEDED', 'message', 'Too many scans. Please wait.');
+  END IF;
+
+  -- Rate limiting (per device)
+  IF _device_id IS NOT NULL THEN
+    SELECT COUNT(*) INTO v_device_count
+    FROM ticket_scans
+    WHERE device_id = _device_id
+      AND event_id = _event_id
+      AND scanned_at > NOW() - INTERVAL '1 minute';
+
+    IF v_device_count >= v_rate_limit_per_device THEN
+      INSERT INTO ticket_scans (
+        ticket_id, event_id, scanner_user_id, device_id, ip_address, user_agent,
+        scan_result, reason_code
+      ) VALUES (
+        v_ticket_id, _event_id, auth.uid(), _device_id, _ip_address, _user_agent,
+        'RATE_LIMIT_EXCEEDED', 'DEVICE_RATE_LIMIT'
+      );
+
+      RETURN jsonb_build_object('error', 'RATE_LIMIT_EXCEEDED', 'message', 'Device scan limit exceeded.');
+    END IF;
+  END IF;
+
+  -- Check ticket status
+  v_result := CASE v_ticket.status
+    WHEN 'issued' THEN 'VALID'
+    WHEN 'checked_in' THEN 'ALREADY_USED'
+    WHEN 'cancelled' THEN 'CANCELLED'
+    WHEN 'refunded' THEN 'REFUNDED'
+    ELSE 'INVALID'
+  END;
+
+  -- Get participant info (for response)
+  SELECT o.customer_name, o.email
+  INTO v_participant_name, v_participant_email
+  FROM orders o
+  WHERE o.id = v_ticket.order_id;
+
+  -- Apply PII masking
+  IF v_pii_level = 'masked' THEN
+    v_participant_name := mask_participant_name(v_participant_name);
+    v_participant_email := mask_email(v_participant_email);
+  ELSIF v_pii_level = 'none' THEN
+    v_participant_name := NULL;
+    v_participant_email := NULL;
+  END IF;
+
+  -- Atomic update if valid
+  IF v_result = 'VALID' THEN
+    UPDATE ticket_instances
+    SET status = 'checked_in',
+        checked_in_at = NOW()
+    WHERE id = v_ticket_id;
+  END IF;
+
+  -- Log scan
+  INSERT INTO ticket_scans (
+    ticket_id, event_id, scanner_user_id, device_id, ip_address, user_agent,
+    scan_result, reason_code
+  ) VALUES (
+    v_ticket_id, _event_id, auth.uid(), _device_id, _ip_address, _user_agent,
+    v_result, NULL
+  );
+
+  -- Get ticket type name
+  SELECT tt.name INTO v_ticket_type_id
+  FROM ticket_types tt
+  WHERE tt.id = v_ticket.ticket_type_id;
+
+  -- Return result
+  RETURN jsonb_build_object(
+    'result', v_result,
+    'ticket', jsonb_build_object(
+      'id', v_ticket_id,
+      'type_name', v_ticket_type_id,
+      'participant_name', v_participant_name,
+      'participant_email', v_participant_email,
+      'checked_in_at', CASE WHEN v_result = 'VALID' THEN NOW() ELSE NULL END
+    )
+  );
+
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Log error
+    INSERT INTO ticket_scans (
+      ticket_id, event_id, scanner_user_id, device_id, ip_address, user_agent,
+      scan_result, reason_code
+    ) VALUES (
+      v_ticket_id, _event_id, auth.uid(), _device_id, _ip_address, _user_agent,
+      'ERROR', SQLERRM
+    );
+
+    RETURN jsonb_build_object('error', 'ERROR', 'message', SQLERRM);
+END;
+$$;
+
+COMMENT ON FUNCTION scan_ticket IS 'F007: Professional ticket scanning with rate limiting and audit trail';
+
+-- Drop en recreate undo_check_in met fix
+DROP FUNCTION IF EXISTS undo_check_in(UUID, TEXT);
+
+CREATE OR REPLACE FUNCTION undo_check_in(
+  _ticket_id UUID,
+  _reason TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_ticket RECORD;
+  v_org_id UUID;
+  v_settings JSONB;
+  v_allow_undo BOOLEAN;
+BEGIN
+  -- Auth check
+  IF auth.uid() IS NULL THEN
+    RETURN jsonb_build_object('error', 'UNAUTHORIZED', 'message', 'Authentication required');
+  END IF;
+
+  -- Get ticket
+  SELECT ti.id, ti.event_id, ti.status, e.org_id
+  INTO v_ticket
+  FROM ticket_instances ti
+  JOIN events e ON e.id = ti.event_id
+  WHERE ti.id = _ticket_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'TICKET_NOT_FOUND', 'message', 'Ticket not found');
+  END IF;
+
+  v_org_id := v_ticket.org_id;
+
+  -- Check admin/owner role
+  IF NOT (public.has_role(v_org_id, 'admin') OR public.has_role(v_org_id, 'owner')) THEN
+    RETURN jsonb_build_object('error', 'UNAUTHORIZED', 'message', 'Only admins can undo check-ins');
+  END IF;
+
+  -- Check settings (FIX: use setting_value column)
+  SELECT setting_value INTO v_settings
+  FROM event_settings
+  WHERE event_id = v_ticket.event_id AND domain = 'scanning';
+
+  IF v_settings IS NULL THEN
+    v_settings := (SELECT get_default_settings()->'scanning');
+  END IF;
+
+  v_allow_undo := COALESCE((v_settings->>'allow_undo_checkin')::boolean, false);
+
+  IF NOT v_allow_undo THEN
+    RETURN jsonb_build_object('error', 'UNDO_NOT_ALLOWED', 'message', 'Undo check-in is disabled for this event');
+  END IF;
+
+  -- Check ticket is checked_in
+  IF v_ticket.status != 'checked_in' THEN
+    RETURN jsonb_build_object('error', 'NOT_CHECKED_IN', 'message', 'Ticket is not checked in');
+  END IF;
+
+  -- Undo check-in
+  UPDATE ticket_instances
+  SET status = 'issued',
+      checked_in_at = NULL
+  WHERE id = _ticket_id;
+
+  -- Log undo in audit
+  INSERT INTO ticket_scans (
+    ticket_id, event_id, scanner_user_id,
+    scan_result, reason_code
+  ) VALUES (
+    _ticket_id, v_ticket.event_id, auth.uid(),
+    'UNDO', _reason
+  );
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Check-in undone successfully'
+  );
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('error', 'ERROR', 'message', SQLERRM);
+END;
+$$;
+
+COMMENT ON FUNCTION undo_check_in IS 'F007: Admin-only function to undo a check-in';
+
+-- ===========================================================================
+-- Verification
+-- ===========================================================================
+
+-- Verify functies bestaan
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'scan_ticket') THEN
+    RAISE EXCEPTION 'scan_ticket function not created';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'undo_check_in') THEN
+    RAISE EXCEPTION 'undo_check_in function not created';
+  END IF;
+
+  RAISE NOTICE 'F007 Hotfix: Functions recreated successfully with correct settings column';
+END $$;

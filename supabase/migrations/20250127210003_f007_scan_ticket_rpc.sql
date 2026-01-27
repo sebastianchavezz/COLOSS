@@ -133,7 +133,7 @@ BEGIN
   END IF;
 
   -- Get scanning settings
-  SELECT settings INTO v_settings
+  SELECT setting_value INTO v_settings
   FROM event_settings
   WHERE event_id = _event_id AND domain = 'scanning';
 

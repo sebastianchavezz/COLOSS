@@ -44,7 +44,7 @@ BEGIN
   END IF;
 
   -- Check settings
-  SELECT settings INTO v_settings
+  SELECT setting_value INTO v_settings
   FROM event_settings
   WHERE event_id = v_ticket.event_id AND domain = 'scanning';
 
