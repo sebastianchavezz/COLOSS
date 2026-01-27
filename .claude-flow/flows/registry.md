@@ -13,7 +13,7 @@
 | F004 | Event Discovery | 🔴 | 0/2 | - | ⬜ |
 | F005 | Ticket Selection | 🟡 | 1/2 | S1 Complete | ✅ |
 | F006 | Checkout/Payment | 🔴 | 0/3 | - | ⬜ |
-| F007 | Ticket Delivery | 🔴 | 0/2 | - | ⬜ |
+| F007 | Ticket Delivery | 🟡 | 1/3 | S1 Complete | ✅ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
 | F009 | Refund Flow | 🔴 | 0/2 | - | ⬜ |
 | F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
@@ -33,8 +33,8 @@
 | Metric | Value |
 |--------|-------|
 | Total Flows | 11 |
-| 🔴 Planned | 8 |
-| 🟡 Active | 1 |
+| 🔴 Planned | 7 |
+| 🟡 Active | 2 |
 | 🟢 Done | 2 |
 | ⚫ Blocked | 0 |
 
@@ -73,7 +73,7 @@ F001 (User Registration)
 | 1 | Authentication | F001, F002 | 🔴 Planned |
 | 2 | Events | F003, F010 | 🔴 Planned |
 | 3 | Discovery | F004, F005 | 🟡 Partial (F005 S1 done) |
-| 4 | Checkout | F006, F007 | 🔴 Planned |
+| 4 | Checkout | F006, F007 | 🟡 Partial (F007 S1 done) |
 | 5 | Support | F008, F009 | 🟡 Partial (F008 done) |
 
 ## Directory Structure
