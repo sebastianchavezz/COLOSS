@@ -11,7 +11,7 @@
 | F002 | User Login/Auth | 🔴 | 0/2 | - | ⬜ |
 | F003 | Event Creation | 🔴 | 0/3 | - | ⬜ |
 | F004 | Event Discovery | 🔴 | 0/2 | - | ⬜ |
-| F005 | Ticket Selection | 🔴 | 0/2 | - | ⬜ |
+| F005 | Ticket Selection | 🟡 | 1/2 | S1 Complete | ✅ |
 | F006 | Checkout/Payment | 🔴 | 0/3 | - | ⬜ |
 | F007 | Ticket Delivery | 🔴 | 0/2 | - | ⬜ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
@@ -33,8 +33,8 @@
 | Metric | Value |
 |--------|-------|
 | Total Flows | 11 |
-| 🔴 Planned | 9 |
-| 🟡 Active | 0 |
+| 🔴 Planned | 8 |
+| 🟡 Active | 1 |
 | 🟢 Done | 2 |
 | ⚫ Blocked | 0 |
 
@@ -72,7 +72,7 @@ F001 (User Registration)
 |--------|-------|-------|--------|
 | 1 | Authentication | F001, F002 | 🔴 Planned |
 | 2 | Events | F003, F010 | 🔴 Planned |
-| 3 | Discovery | F004, F005 | 🔴 Planned |
+| 3 | Discovery | F004, F005 | 🟡 Partial (F005 S1 done) |
 | 4 | Checkout | F006, F007 | 🔴 Planned |
 | 5 | Support | F008, F009 | 🟡 Partial (F008 done) |
 
