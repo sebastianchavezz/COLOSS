@@ -9,6 +9,13 @@
 -- ===========================================================================
 
 -- ===========================================================================
+-- 0. ENABLE EXTENSIONS
+-- ===========================================================================
+
+-- Enable pgcrypto for token hashing (SHA256)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ===========================================================================
 -- 1. CREATE TICKET_SCANS TABLE
 -- ===========================================================================
 
@@ -52,7 +59,8 @@ CREATE TABLE IF NOT EXISTS ticket_scans (
       'TRANSFER_PENDING',
       'NOT_IN_EVENT',
       'RATE_LIMIT_EXCEEDED',
-      'UNDO'
+      'UNDO',
+      'ERROR'
     )
   )
 );
@@ -64,7 +72,7 @@ COMMENT ON COLUMN ticket_scans.ticket_id IS
   'Ticket that was scanned (NULL if token invalid)';
 
 COMMENT ON COLUMN ticket_scans.scan_result IS
-  'Result of scan: VALID, INVALID, ALREADY_USED, CANCELLED, REFUNDED, TRANSFER_PENDING, NOT_IN_EVENT, RATE_LIMIT_EXCEEDED, UNDO';
+  'Result of scan: VALID, INVALID, ALREADY_USED, CANCELLED, REFUNDED, TRANSFER_PENDING, NOT_IN_EVENT, RATE_LIMIT_EXCEEDED, UNDO, ERROR';
 
 COMMENT ON COLUMN ticket_scans.reason_code IS
   'Optional machine-readable code for failure reason (e.g., "TOKEN_NOT_FOUND", "STATUS_VOID")';
