@@ -48,12 +48,14 @@ Dit project gebruikt een multi-agent development pipeline met gespecialiseerde a
 ```
 
 ### Commands
-- `/sprint [naam] - [beschrijving]` - Start volledige sprint pipeline
+- `/sprint [naam] - [beschrijving]` - Start volledige sprint pipeline (NIEUWE flow)
+- `/upgrade [flow-id] [beschrijving]` - Upgrade BESTAANDE flow met nieuwe functionaliteit
 - `/flow [F00X]` - Implementeer specifieke flow
 - `/plan [feature]` - Plan een nieuwe feature
 - `/implement [spec]` - Implementeer volgens spec
 - `/test` - Run alle tests
 - `/review` - Review recente wijzigingen
+- `/debug [issue]` - Systematisch debuggen van problemen
 
 ---
 
