@@ -60,10 +60,20 @@ Voor elke function in het plan:
 Update `src/types/` met nieuwe interfaces.
 
 ### FASE 5: Basic Tests (@tester rol)
-Voor elke nieuwe component:
-- Happy path test
-- Error case test
-- RLS test
+
+**KRITIEK: Identificeer flow ID en schrijf tests naar `.claude-flow/flows/{flow-id}/tests/`**
+
+```bash
+# Extract flow ID from context
+FLOW_ID=$(grep -oE 'f[0-9]{3}' <<< "$ARGUMENTS" | head -1)
+
+# Ensure test directory exists
+mkdir -p .claude-flow/flows/$FLOW_ID/tests
+```
+
+Voor elke nieuwe component, schrijf tests in:
+- `.claude-flow/flows/{flow-id}/tests/integration-tests.mjs` - Happy path + error cases
+- `.claude-flow/flows/{flow-id}/tests/manual-test.sql` - RLS + manual scenarios
 
 ### FASE 6: Self-Review (@reviewer rol)
 Quick check:

@@ -42,11 +42,25 @@ Genereer/update TypeScript types:
 - Shared interfaces
 
 ### STAP 5: Tests
-Schrijf tests voor:
+
+**KRITIEK: Schrijf tests naar `.claude-flow/flows/{flow-id}/tests/` directory!**
+
+```bash
+# Ensure test directory exists
+FLOW_ID=$(echo "$ARGUMENTS" | tr '[:upper:]' '[:lower:]' | grep -oE 'f[0-9]{3}')
+mkdir -p .claude-flow/flows/$FLOW_ID/tests
+```
+
+Schrijf tests naar `.claude-flow/flows/{flow-id}/tests/`:
+- `integration-tests.mjs` - Automated tests voor alle scenarios
+- `manual-test.sql` - Manual SQL tests voor RLS + edge cases
+- `README.md` - Test documentatie en run instructies
+
+Test coverage:
 - Elke test scenario uit de flow doc
-- RLS policy tests
-- Edge Function tests
-- Happy path + error cases
+- RLS policy tests (per tabel, per role)
+- Edge Function tests (happy + error cases)
+- Regression tests (bestaande functionaliteit blijft werken)
 
 ### STAP 6: Deploy
 ```bash

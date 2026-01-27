@@ -30,20 +30,58 @@ Je bent de **Tester** - verantwoordelijk voor het vinden van bugs en garanderen 
 - Wat als er race conditions zijn?
 - Wat als de user iets onverwachts doet?
 
+## KRITIEKE REGEL: Flow-Aware Testing
+
+**ALTIJD schrijf tests naar de flow directory, NIET naar root tests/ directory!**
+
+### Test Directory Structure
+
+```
+.claude-flow/flows/{flow-id}/tests/
+├── README.md              # Test documentatie
+├── integration-tests.mjs  # Automated integration tests
+├── manual-test.sql        # Manual SQL test guide
+└── unit-tests/            # (optioneel) Unit tests
+```
+
+### Test File Naming
+
+| Type | Filename | Example |
+|------|----------|---------|
+| Integration | `integration-tests.mjs` | Voor RPC/API tests |
+| Manual SQL | `manual-test.sql` | Voor database tests |
+| E2E | `e2e-tests.mjs` | Voor UI flow tests |
+| Unit | `unit/*.test.ts` | Voor pure functions |
+| README | `README.md` | Test documentatie (VERPLICHT) |
+
+### README Template
+
+**ALTIJD maak/update een README.md in de test directory:**
+
+```bash
+# Copy template en pas aan
+cp .claude/templates/test-readme-template.md .claude-flow/flows/$FLOW_ID/tests/README.md
+
+# Edit met flow-specifieke details
+```
+
 ## Eerste Actie bij Elke Taak
 
 ```bash
-# 1. Lees shared memory
+# 1. Identificeer de flow ID uit context
+FLOW_ID=$(echo "$TASK" | grep -oE 'f[0-9]{3}' | head -1)
+
+# 2. Zorg dat test directory bestaat
+mkdir -p .claude-flow/flows/$FLOW_ID/tests
+
+# 3. Lees bestaande flow context
+cat .claude-flow/flows/$FLOW_ID/flow.md
+
+# 4. Check welke tests al bestaan
+ls -la .claude-flow/flows/$FLOW_ID/tests/
+
+# 5. Bekijk de code die getest moet worden
 cat .claude-flow/memory/shared.md
-
-# 2. Lees handoff
-ls -la .claude-flow/handoffs/ | tail -1
-
-# 3. Check test coverage baseline
-npm test -- --coverage 2>/dev/null || echo "No coverage yet"
-
-# 4. Bekijk de code die getest moet worden
-find src/ -name "*.ts" -newer .claude-flow/handoffs/
 ```
 
 ## Test Categories

@@ -13,9 +13,30 @@ Test: **$ARGUMENTS**
 - F00X = test specifieke flow
 - filename = test specifieke file
 
+## Test Directory Locations
+
+**Tests zijn georganiseerd per flow:**
+```
+.claude-flow/flows/{flow-id}/tests/
+├── integration-tests.mjs  # Automated tests
+├── manual-test.sql        # Manual SQL tests
+└── README.md              # Test documentation
+```
+
 ## Automatische Test Workflow
 
-### 1. Unit Tests
+### 1. Find and Run Flow Tests
+```bash
+# Test alle flows
+for flow_dir in .claude-flow/flows/f*/tests/; do
+  if [ -f "$flow_dir/integration-tests.mjs" ]; then
+    echo "Testing $(basename $(dirname $flow_dir))..."
+    node "$flow_dir/integration-tests.mjs" 2>&1
+  fi
+done
+```
+
+### 2. Unit Tests (legacy)
 ```bash
 npm test 2>/dev/null || echo "Geen npm tests geconfigureerd"
 ```

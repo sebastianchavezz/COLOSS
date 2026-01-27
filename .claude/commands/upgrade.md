@@ -74,10 +74,22 @@ Bijvoorbeeld:
 
 ### FASE 5: Write & Run Tests (@tester rol)
 
-**Schrijf tests voor de UPGRADE, niet de hele flow:**
+**KRITIEK: Schrijf tests naar `.claude-flow/flows/{flow-id}/tests/` directory!**
 
+**1. Zorg dat test directory bestaat:**
+```bash
+mkdir -p .claude-flow/flows/{flow-id}/tests
+```
+
+**2. Schrijf/update integration tests:**
 ```javascript
 #!/usr/bin/env node
+/**
+ * {Flow ID} - {Feature Name} Tests
+ *
+ * Run with:
+ *   node .claude-flow/flows/{flow-id}/tests/integration-tests.mjs
+ */
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://yihypotpywllwoymjduz.supabase.co";
@@ -92,21 +104,23 @@ async function test(name, fn) {
   catch (e) { console.log(`❌ ${name}: ${e.message}`); failed++; }
 }
 
-console.log("🧪 Upgrade Tests: {flow-id} - {upgrade-name}\n");
+console.log("🧪 {Flow ID} Tests: {upgrade-name}\n");
 
 // Test new functionality
 await test("New RPC exists", async () => { /* ... */ });
 
-// Test existing functionality still works
+// Test existing functionality still works (regression test)
 await test("Existing RPC still works", async () => { /* ... */ });
 
 console.log(`\n✅ Passed: ${passed} | ❌ Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
 ```
 
-**Voer tests uit:**
+**Schrijf naar: `.claude-flow/flows/{flow-id}/tests/integration-tests.mjs`**
+
+**3. Voer tests uit:**
 ```bash
-node tests/integration/{flow-id}_upgrade_{feature}.test.mjs 2>&1
+node .claude-flow/flows/{flow-id}/tests/integration-tests.mjs 2>&1
 ```
 
 ### FASE 6: Deploy (AUTOMATISCH)
@@ -124,11 +138,13 @@ done
 ### FASE 7: Post-Deploy Tests (AUTOMATISCH)
 
 ```bash
-# Run upgrade tests
-node tests/integration/{flow-id}_upgrade_{feature}.test.mjs 2>&1
+# Run flow tests from flow directory
+node .claude-flow/flows/{flow-id}/tests/integration-tests.mjs 2>&1
 
-# Run existing flow tests to verify no regression
-node tests/integration/{flow-id}_*.test.mjs 2>&1 || true
+# If manual tests exist, show instructions
+if [ -f .claude-flow/flows/{flow-id}/tests/manual-test.sql ]; then
+  echo "📝 Manual tests available at: .claude-flow/flows/{flow-id}/tests/manual-test.sql"
+fi
 ```
 
 ### FASE 8: Git Commit & Push (AUTOMATISCH)

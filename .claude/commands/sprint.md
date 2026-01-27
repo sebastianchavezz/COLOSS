@@ -59,8 +59,15 @@ Als iets faalt:
 
 **BELANGRIJK: Deze fase schrijft EN voert tests uit!**
 
-#### 5.1 Schrijf Integration Test
-Maak een test file in `tests/integration/f0XX_feature.test.mjs`:
+**KRITIEK: Schrijf tests naar `.claude-flow/flows/{flow-id}/tests/` directory!**
+
+#### 5.1 Zorg dat test directory bestaat
+```bash
+mkdir -p .claude-flow/flows/{flow-id}/tests
+```
+
+#### 5.2 Schrijf Integration Test
+Maak een test file in `.claude-flow/flows/{flow-id}/tests/integration-tests.mjs`:
 
 ```javascript
 #!/usr/bin/env node
@@ -101,16 +108,16 @@ console.log(`\n✅ Passed: ${passed} | ❌ Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
 ```
 
-#### 5.2 Voer Tests Uit (AUTOMATISCH)
+#### 5.3 Voer Tests Uit (AUTOMATISCH)
 **Voer deze Bash commands direct uit:**
 
 ```bash
-# Run the integration test
-node tests/integration/f0XX_feature.test.mjs 2>&1 || echo "Tests completed with errors"
+# Run the integration test from flow directory
+node .claude-flow/flows/{flow-id}/tests/integration-tests.mjs 2>&1 || echo "Tests completed with errors"
 ```
 
-#### 5.3 Maak Test Report
-Schrijf resultaten naar `sprints/s{n}-test-report.md`
+#### 5.4 Maak Test Report
+Schrijf resultaten naar `.claude-flow/flows/{flow-id}/sprints/s{n}-test-report.md`
 
 ### FASE 6: Deploy to Supabase (AUTOMATISCH)
 **Voer deze Bash commands direct uit:**
@@ -131,7 +138,12 @@ done
 ```bash
 # Re-run tests against deployed database
 echo "🧪 Running post-deploy tests..."
-node tests/integration/f0XX_feature.test.mjs 2>&1
+node .claude-flow/flows/{flow-id}/tests/integration-tests.mjs 2>&1
+
+# Show manual test instructions if available
+if [ -f .claude-flow/flows/{flow-id}/tests/manual-test.sql ]; then
+  echo "📝 Manual tests available at: .claude-flow/flows/{flow-id}/tests/manual-test.sql"
+fi
 
 # Show test summary
 echo "✅ Post-deploy tests complete"
