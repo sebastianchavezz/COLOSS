@@ -241,3 +241,167 @@ export function getAvailableCapacity(ticket: TicketType, _soldCount: number = 0)
     if (ticket.capacity_total === 0) return null // Unlimited
     return ticket.capacity_total - _soldCount
 }
+
+// ============================================================
+// F005 EXTENDED CONFIGURATION
+// ============================================================
+
+/**
+ * Haal volledige ticket configuratie op (inclusief i18n, time slots, team config)
+ * Gebruikt RPC: get_ticket_type_full
+ */
+export async function getTicketTypeFull(ticketTypeId: string, locale: string = 'nl') {
+    console.log('[tickets] getTicketTypeFull:', { ticketTypeId, locale })
+
+    const { data, error } = await supabase.rpc('get_ticket_type_full', {
+        _ticket_type_id: ticketTypeId,
+        _locale: locale
+    })
+
+    if (error) {
+        console.error('[tickets] getTicketTypeFull error:', error)
+        return { data: null, error: new Error(error.message) }
+    }
+
+    if (data?.error) {
+        return { data: null, error: new Error(data.error) }
+    }
+
+    return { data, error: null }
+}
+
+/**
+ * Update extended ticket fields (distance, category, visibility, etc.)
+ * Gebruikt RPC: update_ticket_type_extended
+ */
+export async function updateTicketExtended(ticketTypeId: string, updates: any) {
+    console.log('[tickets] updateTicketExtended:', { ticketTypeId, updates })
+
+    const { data, error } = await supabase.rpc('update_ticket_type_extended', {
+        _ticket_type_id: ticketTypeId,
+        _updates: updates
+    })
+
+    if (error) {
+        console.error('[tickets] updateTicketExtended error:', error)
+        return { data: null, error: new Error(error.message) }
+    }
+
+    if (data?.error) {
+        return { data: null, error: new Error(data.error) }
+    }
+
+    return { data, error: null }
+}
+
+/**
+ * Upsert i18n content voor ticket type
+ */
+export async function upsertTicketI18n(
+    ticketTypeId: string,
+    locale: string,
+    name: string,
+    description?: string,
+    instructions?: string
+) {
+    console.log('[tickets] upsertTicketI18n:', { ticketTypeId, locale })
+
+    const { data, error } = await supabase.rpc('upsert_ticket_type_i18n', {
+        _ticket_type_id: ticketTypeId,
+        _locale: locale,
+        _name: name,
+        _description: description || null,
+        _instructions: instructions || null
+    })
+
+    if (error) {
+        console.error('[tickets] upsertTicketI18n error:', error)
+        return { data: null, error: new Error(error.message) }
+    }
+
+    return { data, error: null }
+}
+
+/**
+ * Upsert time slot
+ */
+export async function upsertTimeSlot(
+    ticketTypeId: string,
+    slotTime: string,
+    options: {
+        slotDate?: string | null
+        label?: string | null
+        capacity?: number | null
+        sortOrder?: number
+        id?: string | null
+    } = {}
+) {
+    console.log('[tickets] upsertTimeSlot:', { ticketTypeId, slotTime, options })
+
+    const { data, error } = await supabase.rpc('upsert_ticket_time_slot', {
+        _ticket_type_id: ticketTypeId,
+        _slot_time: slotTime,
+        _slot_date: options.slotDate || null,
+        _label: options.label || null,
+        _capacity: options.capacity || null,
+        _sort_order: options.sortOrder || 0,
+        _id: options.id || null
+    })
+
+    if (error) {
+        console.error('[tickets] upsertTimeSlot error:', error)
+        return { data: null, error: new Error(error.message) }
+    }
+
+    return { data, error: null }
+}
+
+/**
+ * Delete time slot
+ */
+export async function deleteTimeSlot(slotId: string) {
+    console.log('[tickets] deleteTimeSlot:', { slotId })
+
+    const { data, error } = await supabase.rpc('delete_ticket_time_slot', {
+        _slot_id: slotId
+    })
+
+    if (error) {
+        console.error('[tickets] deleteTimeSlot error:', error)
+        return { success: false, error: new Error(error.message) }
+    }
+
+    return { success: data, error: null }
+}
+
+/**
+ * Upsert team config
+ */
+export async function upsertTeamConfig(
+    ticketTypeId: string,
+    config: {
+        teamRequired?: boolean
+        teamMinSize?: number
+        teamMaxSize?: number
+        allowIncompleteTeams?: boolean
+        captainRequired?: boolean
+    }
+) {
+    console.log('[tickets] upsertTeamConfig:', { ticketTypeId, config })
+
+    const { data, error } = await supabase.rpc('upsert_ticket_team_config', {
+        _ticket_type_id: ticketTypeId,
+        _team_required: config.teamRequired ?? false,
+        _team_min_size: config.teamMinSize ?? 2,
+        _team_max_size: config.teamMaxSize ?? 10,
+        _allow_incomplete_teams: config.allowIncompleteTeams ?? false,
+        _captain_required: config.captainRequired ?? true
+    })
+
+    if (error) {
+        console.error('[tickets] upsertTeamConfig error:', error)
+        return { data: null, error: new Error(error.message) }
+    }
+
+    return { data, error: null }
+}

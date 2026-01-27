@@ -11,7 +11,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Plus, Ticket, Loader2, Trash2, CheckCircle, XCircle, Edit2 } from 'lucide-react'
+import { Plus, Ticket, Loader2, Trash2, CheckCircle, XCircle, Edit2, Eye } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
     listTickets,
@@ -25,6 +25,7 @@ import {
     type TicketStatus
 } from '../data/tickets'
 import type { TicketType, AppEvent, Organization } from '../types/supabase'
+import { TicketDetailModal } from '../components/TicketDetailModal'
 
 // Context type van EventDetail
 interface EventContext {
@@ -44,6 +45,10 @@ export function EventTickets() {
     const [showModal, setShowModal] = useState(false)
     const [editingTicket, setEditingTicket] = useState<TicketType | null>(null)
     const [actionLoading, setActionLoading] = useState<string | null>(null) // ticketId or 'create'
+
+    // Detail modal state (for F005 extended config)
+    const [showDetailModal, setShowDetailModal] = useState(false)
+    const [detailTicketId, setDetailTicketId] = useState<string | null>(null)
 
     // Fetch tickets
     const fetchTickets = useCallback(async () => {
@@ -74,10 +79,16 @@ export function EventTickets() {
         setShowModal(true)
     }
 
-    // Open edit modal
+    // Open edit modal (simple edit)
     const handleEdit = (ticket: TicketType) => {
         setEditingTicket(ticket)
         setShowModal(true)
+    }
+
+    // Open detail modal (F005 extended config)
+    const handleViewDetails = (ticket: TicketType) => {
+        setDetailTicketId(ticket.id)
+        setShowDetailModal(true)
     }
 
     // Toggle status
@@ -212,6 +223,7 @@ export function EventTickets() {
                                 <TicketRow
                                     key={ticket.id}
                                     ticket={ticket}
+                                    onViewDetails={handleViewDetails}
                                     onEdit={handleEdit}
                                     onToggleStatus={handleToggleStatus}
                                     onDelete={handleDelete}
@@ -232,6 +244,20 @@ export function EventTickets() {
                     onClose={() => setShowModal(false)}
                 />
             )}
+
+            {/* Detail Modal (F005 Extended Config) */}
+            {showDetailModal && detailTicketId && (
+                <TicketDetailModal
+                    ticketId={detailTicketId}
+                    onClose={() => {
+                        setShowDetailModal(false)
+                        setDetailTicketId(null)
+                    }}
+                    onSaved={() => {
+                        fetchTickets() // Refresh list
+                    }}
+                />
+            )}
         </div>
     )
 }
@@ -242,18 +268,19 @@ export function EventTickets() {
  */
 interface TicketRowProps {
     ticket: TicketType
+    onViewDetails: (ticket: TicketType) => void
     onEdit: (ticket: TicketType) => void
     onToggleStatus: (ticket: TicketType) => void
     onDelete: (ticket: TicketType) => void
     actionLoading: string | null
 }
 
-function TicketRow({ ticket, onEdit, onToggleStatus, onDelete, actionLoading }: TicketRowProps) {
+function TicketRow({ ticket, onViewDetails, onEdit, onToggleStatus, onDelete, actionLoading }: TicketRowProps) {
     // Cast ticket to any to access 'sold' property from view
     const soldCount = (ticket as any).sold ?? 0
 
     return (
-        <tr className="hover:bg-gray-50">
+        <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => onViewDetails(ticket)}>
             <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm">
                 <div className="font-medium text-gray-900">{ticket.name}</div>
                 {ticket.description && (
@@ -284,9 +311,24 @@ function TicketRow({ ticket, onEdit, onToggleStatus, onDelete, actionLoading }: 
             </td>
             <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium">
                 <div className="flex items-center justify-end space-x-2">
+                    {/* View Details */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onViewDetails(ticket)
+                        }}
+                        className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
+                        title="Details bekijken"
+                    >
+                        <Eye className="h-4 w-4" />
+                    </button>
+
                     {/* Toggle Status */}
                     <button
-                        onClick={() => onToggleStatus(ticket)}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onToggleStatus(ticket)
+                        }}
                         disabled={actionLoading === ticket.id}
                         className={clsx(
                             'p-1 rounded',
@@ -308,16 +350,22 @@ function TicketRow({ ticket, onEdit, onToggleStatus, onDelete, actionLoading }: 
 
                     {/* Edit */}
                     <button
-                        onClick={() => onEdit(ticket)}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onEdit(ticket)
+                        }}
                         className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
-                        title="Bewerken"
+                        title="Snel bewerken"
                     >
                         <Edit2 className="h-4 w-4" />
                     </button>
 
                     {/* Delete */}
                     <button
-                        onClick={() => onDelete(ticket)}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onDelete(ticket)
+                        }}
                         disabled={actionLoading === ticket.id}
                         className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
                         title="Verwijderen"
