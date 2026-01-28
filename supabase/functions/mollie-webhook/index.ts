@@ -2,10 +2,21 @@
  * mollie-webhook Edge Function
  *
  * Processes Mollie payment webhook notifications.
- * This function is called by Mollie when a payment status changes.
+ * Called by Mollie when a payment status changes.
  *
- * Security: Webhook is verified by fetching payment from Mollie API.
- * Uses idempotency via payment_events table to prevent duplicate processing.
+ * Security:
+ * - Webhook verified by re-fetching payment from Mollie API (not trusting payload)
+ * - Idempotency via payment_events table (unique constraint on provider_event_id)
+ * - Returns 200 for duplicates (stops Mollie retries)
+ * - Returns 500 for transient errors (Mollie will retry)
+ *
+ * Flow:
+ * 1. Parse webhook (form data with payment ID)
+ * 2. Re-fetch from Mollie API (verification + authoritative status)
+ * 3. Idempotency check via payment_events
+ * 4. Call handle_payment_webhook RPC (atomic: status update + ticket issuance + email)
+ * 5. Mark event as processed
+ * 6. Return 200 OK
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
@@ -20,49 +31,67 @@ serve(async (req: Request) => {
 
     try {
         // 1. PARSE WEBHOOK
+        // Mollie sends form-encoded data with 'id' field
         const formData = await req.formData()
         const molliePaymentId = formData.get('id')
 
         if (!molliePaymentId) {
-            logger.warn('Missing payment id in webhook')
+            logger.warn('Missing payment id in webhook payload')
             return new Response('Missing id', { status: 400 })
         }
 
-        logger.info('Processing webhook', String(molliePaymentId))
+        logger.info('Processing webhook', { paymentId: String(molliePaymentId) })
 
         // 2. SETUP ADMIN CLIENT
         const supabaseAdmin = getServiceClient()
 
         // 3. FETCH FROM MOLLIE (Webhook verification)
+        // We never trust the webhook payload directly — always re-fetch from Mollie API.
+        // This prevents spoofed webhooks and ensures we have the authoritative status.
         const mollieApiKey = Deno.env.get('MOLLIE_API_KEY')
         if (!mollieApiKey) {
-            logger.error('Missing MOLLIE_API_KEY')
+            logger.error('Missing MOLLIE_API_KEY environment variable')
             return new Response('Server Error', { status: 500 })
         }
 
-        const mollieResponse = await fetch(`${MOLLIE_API_URL}/${molliePaymentId}`, {
-            headers: { 'Authorization': `Bearer ${mollieApiKey}` }
-        })
+        let molliePayment: any
+        try {
+            const mollieResponse = await fetch(`${MOLLIE_API_URL}/${molliePaymentId}`, {
+                headers: { 'Authorization': `Bearer ${mollieApiKey}` }
+            })
 
-        if (!mollieResponse.ok) {
-            logger.error('Mollie fetch failed', { status: mollieResponse.status })
-            return new Response('Mollie API Error', { status: 502 })
+            if (!mollieResponse.ok) {
+                logger.error('Mollie API fetch failed', { status: mollieResponse.status, paymentId: String(molliePaymentId) })
+                // Return 502 so Mollie retries
+                return new Response('Mollie API Error', { status: 502 })
+            }
+
+            molliePayment = await mollieResponse.json()
+        } catch (fetchErr) {
+            logger.error('Mollie API fetch exception', fetchErr)
+            return new Response('Mollie API Unreachable', { status: 502 })
         }
 
-        const molliePayment = await mollieResponse.json()
         const { status, metadata } = molliePayment
         const orderId = metadata?.order_id
 
         if (!orderId) {
-            logger.warn('No order_id in payment metadata')
-            return new Response('Invalid Metadata', { status: 200 }) // Stop retries
+            logger.warn('No order_id in payment metadata — cannot process', { paymentId: String(molliePaymentId) })
+            // Return 200 to stop retries (this payment has no order association)
+            return new Response('OK - no order_id', { status: 200 })
         }
 
-        logger.info('Payment status', { paymentId: String(molliePaymentId), status, orderId })
+        logger.info('Payment status from Mollie', {
+            paymentId: String(molliePaymentId),
+            status,
+            orderId
+        })
 
-        // 4. IDEMPOTENCY (Payment Events)
-        // We store each unique event (paymentId:status) to prevent duplicate processing
+        // 4. IDEMPOTENCY CHECK (payment_events table)
+        // Each unique (provider, provider_event_id) can only be processed once.
+        // provider_event_id = "paymentId:status" ensures status changes are tracked separately.
         const eventKey = `${molliePaymentId}:${status}`
+
         const { error: eventError } = await supabaseAdmin
             .from('payment_events')
             .insert({
@@ -71,39 +100,67 @@ serve(async (req: Request) => {
                 provider_payment_id: String(molliePaymentId),
                 event_type: `payment.${status}`,
                 payload: molliePayment,
-                processed_at: null
+                processed_at: null  // Will be set after successful processing
             })
 
         if (eventError) {
-            // Unique constraint violation = already processed
+            // Unique constraint violation (23505) = already processed → safe to return 200
             if (eventError.code === '23505') {
-                logger.info('Event already processed (idempotent)', eventKey)
+                logger.info('Event already processed (idempotent)', { eventKey })
                 return new Response('OK', { status: 200 })
             }
-            logger.error('DB Error inserting payment event', eventError)
+            // Other DB error → return 500 so Mollie retries
+            logger.error('DB Error inserting payment_event', { error: eventError, eventKey })
             return new Response('Database Error', { status: 500 })
         }
 
-        logger.info('Payment event recorded', eventKey)
+        logger.info('Payment event recorded', { eventKey })
 
-        // 5. UPDATE DB VIA RPC
-        // The RPC function handles order status updates, registration updates, and ticket issuance
-        const { data: isPaid, error: rpcError } = await supabaseAdmin.rpc('handle_payment_webhook', {
+        // 5. CALL RPC: handle_payment_webhook
+        // This is the atomic transaction that:
+        // - Updates payment status
+        // - Updates order status
+        // - Issues ticket_instances (new model)
+        // - Queues confirmation email via email_outbox
+        // - Handles overbooked failsafe
+        const { data: webhookResult, error: rpcError } = await supabaseAdmin.rpc('handle_payment_webhook', {
             _order_id: orderId,
             _payment_id: String(molliePaymentId),
             _status: status,
-            _amount: molliePayment.amount.value,
-            _currency: molliePayment.amount.currency
+            _amount: parseFloat(molliePayment.amount?.value || '0'),
+            _currency: molliePayment.amount?.currency || 'EUR'
         })
 
         if (rpcError) {
-            logger.error('RPC Error', rpcError)
+            logger.error('RPC handle_payment_webhook failed', {
+                error: rpcError.message,
+                orderId,
+                status
+            })
+            // Return 500 so Mollie retries — the idempotency check will catch duplicates
             return new Response('Transaction Failed', { status: 500 })
         }
 
-        if (isPaid) {
-            logger.info('Order marked as PAID', { orderId })
-            // TODO: Trigger email sending asynchronously
+        logger.info('Webhook RPC result', webhookResult)
+
+        // Handle overbooked scenario
+        if (webhookResult?.overbooked) {
+            logger.warn('OVERBOOKED DETECTED — order cancelled, refund required', {
+                orderId,
+                available: webhookResult.available,
+                requested: webhookResult.requested,
+                ticketType: webhookResult.ticket_type
+            })
+            // Still return 200 — the order is cancelled, refund must be handled externally
+        }
+
+        // Log success
+        if (webhookResult?.paid) {
+            logger.info('Order marked as PAID', {
+                orderId,
+                ticketsIssued: webhookResult.tickets_issued,
+                emailQueued: webhookResult.email_queued
+            })
         }
 
         // 6. MARK EVENT AS PROCESSED
@@ -113,12 +170,13 @@ serve(async (req: Request) => {
             .eq('provider', 'mollie')
             .eq('provider_event_id', eventKey)
 
-        logger.info('Webhook processed successfully')
+        logger.info('Webhook processed successfully', { eventKey, status })
         return new Response('OK', { status: 200 })
 
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
-        logger.error('Unexpected error', message)
+        logger.error('Unexpected error in webhook', message)
+        // Return 500 so Mollie retries
         return new Response('Internal Server Error', { status: 500 })
     }
 })

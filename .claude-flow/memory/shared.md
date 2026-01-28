@@ -10,7 +10,7 @@
 
 ## Current State
 
-- **Sprint**: Communication
+- **Sprint**: F006 Checkout & Payment
 - **Phase**: completed
 - **Blockers**: none
 
@@ -65,6 +65,16 @@
 - [x] Database schema (7 layers)
 - [x] RLS policies on all tables
 - [x] Multi-tenant isolation
+- [x] **Checkout & Payment Module** (Sprint F006)
+  - [x] create-order-public: guest + authenticated checkout
+  - [x] Atomic capacity validation (FOR UPDATE SKIP LOCKED)
+  - [x] Server-side price calculation
+  - [x] Mollie payment integration (create + webhook)
+  - [x] Webhook idempotency (payment_events deduplication)
+  - [x] Ticket issuance on payment success (ticket_instances)
+  - [x] Confirmation email via email_outbox
+  - [x] Overbooked failsafe + stale order cleanup
+  - [x] Public token for order lookup without auth
 - [x] **Communication Module** (Sprint Communication)
   - [x] Email Outbox pattern met exactly-once delivery
   - [x] Resend email provider integration
@@ -105,7 +115,7 @@
 | F003 | 🔴 Planned | 0% | F002 |
 | F004 | 🔴 Planned | 0% | F003 |
 | F005 | 🔴 Planned | 0% | F004 |
-| F006 | 🔴 Planned | 0% | F005 |
+| F006 | 🟢 Completed | 100% | - |
 | F007 | 🔴 Planned | 0% | F006 |
 | F008 | 🟢 Completed | 100% | - |
 | F009 | 🔴 Planned | 0% | F006 |

@@ -12,7 +12,7 @@
 | F003 | Event Creation | 🔴 | 0/3 | - | ⬜ |
 | F004 | Event Discovery | 🔴 | 0/2 | - | ⬜ |
 | F005 | Ticket Selection | 🟡 | 1/2 | S1 Complete | ✅ |
-| F006 | Checkout/Payment | 🔴 | 0/3 | - | ⬜ |
+| F006 | Checkout/Payment | 🟢 | 1/1 | S1 Complete | ✅ |
 | F007 | Ticket Delivery | 🟡 | 1/3 | S1 Complete | ✅ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
 | F009 | Refund Flow | 🔴 | 0/2 | - | ⬜ |
@@ -33,9 +33,9 @@
 | Metric | Value |
 |--------|-------|
 | Total Flows | 11 |
-| 🔴 Planned | 7 |
+| 🔴 Planned | 6 |
 | 🟡 Active | 2 |
-| 🟢 Done | 2 |
+| 🟢 Done | 3 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
@@ -87,6 +87,15 @@ F001 (User Registration)
 │   └── tests/
 ├── f002-user-login/
 │   └── ...
+├── f006-checkout-payment/
+│   ├── flow.md                    # 🟢 Done
+│   ├── sprints/
+│   │   ├── s1-plan.md
+│   │   ├── s1-architecture.md
+│   │   ├── s1-review.md
+│   │   └── s1-test-report.md
+│   └── tests/
+│       └── integration-tests.mjs
 ├── f008-communication/
 │   ├── flow.md                    # 🟢 Done
 │   ├── sprints/

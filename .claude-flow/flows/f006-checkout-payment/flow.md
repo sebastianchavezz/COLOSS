@@ -1,101 +1,99 @@
 # Flow: Checkout & Payment
 
 **ID**: F006
-**Status**: 🔴 Planned
-**Total Sprints**: 3
-**Current Sprint**: -
+**Status**: 🟢 Done
+**Total Sprints**: 1 (consolidated)
+**Current Sprint**: S1 Complete
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| S1 | Order creation + validation | 🔴 |
-| S2 | Payment provider (Mollie) | 🔴 |
-| S3 | Webhooks + idempotency | 🔴 |
+| S1 | Full checkout flow (order + validation + Mollie + webhook + ticket issuance) | 🟢 |
 
 ## Dependencies
-- **Requires**: F005
+- **Requires**: F005 (Ticket Selection)
 - **Blocks**: F007, F009
 
 ## Overview
 
-Bezoekers voltooien hun bestelling en betalen voor tickets.
+Waterdichte checkout flow voor het aankopen van tickets.
+Werkt voor zowel ingelogde gebruikers als guests.
 
 ```
 Als bezoeker
-Wil ik veilig kunnen betalen
-Zodat ik mijn tickets ontvang
+Wil ik veilig kunnen betalen via Mollie
+Zodat ik mijn tickets ontvang na succesvolle betaling
 ```
+
+## Geïmplementeerde Componenten
+
+### Database (Migration: 20250128100000_f006_checkout_payment.sql)
+- `orders.org_id` — server-afgeleid uit event (nooit client-trusted)
+- `orders.subtotal_amount` / `discount_amount` — transparante pricing
+- `validate_checkout_capacity` RPC — atomische capacity + sales window check (FOR UPDATE SKIP LOCKED)
+- `handle_payment_webhook` RPC — atomische webhook: ticket_instances + email + overbooked failsafe
+- `cleanup_stale_pending_orders` RPC — pending orders older than 1 hour
+
+### Edge Functions
+| Function | Purpose | Status |
+|----------|---------|--------|
+| `create-order-public` | Guest + authenticated checkout | 🟢 Fully implemented |
+| `mollie-webhook` | Webhook handler with idempotency + ticket issuance | 🟢 Fully implemented |
+| `create-mollie-payment` | Authenticated-only payment creation | 🟢 Bestaand |
+| `get-order-public` | Public order lookup via token | 🟢 Bestaand |
+| `issue-tickets` | Ticket issuance (called by webhook RPC + free orders) | 🟢 Bestaand |
+| `simulate-payment` | Dev-only payment simulation | 🟢 Bestaand |
+
+### Enforcement Points
+| Point | Where | What |
+|-------|-------|------|
+| Event visibility | create-order-public | events.status = 'published' |
+| Sales window | validate_checkout_capacity RPC | sales_start <= now() <= sales_end |
+| Capacity pre-check | validate_checkout_capacity RPC | FOR UPDATE SKIP LOCKED |
+| Price integrity | create-order-public | Server-calculated, never client-trusted |
+| Webhook verification | mollie-webhook | Re-fetch from Mollie API |
+| Idempotency | mollie-webhook | payment_events unique constraint |
+| Final capacity | handle_payment_webhook RPC | Atomic check before ticket issuance |
+| Overbooked failsafe | handle_payment_webhook RPC | Mark order cancelled if capacity exceeded |
+| Email notification | handle_payment_webhook RPC | Queue via email_outbox |
 
 ## Flow Diagram
 
 ```
-[Cart] → [Enter Details] → [Select Payment]
-                                   │
-                                   ▼
-                           [Create Order]
-                                   │
-                                   ▼
-                          [Payment Provider]
-                                   │
-              ┌────────────────────┴────────────────────┐
-              ▼                                         ▼
-        [Payment Success]                        [Payment Failed]
-              │                                         │
-              ▼                                         ▼
-      [Order Confirmed] → [F007]               [Retry/Cancel]
+[Cart] → [Enter Details] → [create-order-public]
+                                    │
+                          ┌─────────┴─────────┐
+                          ▼                   ▼
+                    [Free: total=0]    [Paid: total>0]
+                          │                   │
+                          ▼                   ▼
+                  [issue-tickets]     [Mollie Payment]
+                          │                   │
+                          ▼                   ▼
+                  [Order Confirmed]    [Redirect to Mollie]
+                                              │
+                                              ▼
+                                       [User Pays]
+                                              │
+                                              ▼
+                                       [mollie-webhook]
+                                              │
+                                    ┌─────────┴─────────┐
+                                    ▼                   ▼
+                             [Paid → issue tickets]  [Failed → cancel order]
+                                    │
+                                    ▼
+                             [Email queued]
+                                    │
+                                    ▼
+                             [Order Confirmed]
 ```
 
-## Supabase
-
-### Tables
-| Table | Purpose |
-|-------|---------|
-| `orders` | Order records |
-| `order_items` | Items per order |
-| `payments` | Payment transactions |
-| `registrations` | Participant registrations |
-
-### RLS Policies
-| Policy | Table | Rule |
-|--------|-------|------|
-| `read_own` | `orders` | `user_id = auth.uid()` |
-| `create_own` | `orders` | `user_id = auth.uid()` |
-
-### Edge Functions
-| Function | Purpose |
-|----------|---------|
-| `create-checkout` | Create order + payment |
-| `mollie-webhook` | Handle payment status |
-| `complete-order` | Finalize order, create tickets |
-
-## API Endpoints
-
-| Method | Endpoint | Auth |
-|--------|----------|------|
-| POST | `/functions/v1/create-checkout` | Yes/Guest |
-| POST | `/functions/v1/mollie-webhook` | Signature |
-| GET | `/rest/v1/orders?id=eq.{id}` | Yes |
-
-## Test Scenarios
-
-| ID | Scenario | Expected |
-|----|----------|----------|
-| T1 | Happy path | Order created, payment success |
-| T2 | Payment failed | Order stays pending |
-| T3 | Duplicate webhook | Idempotent handling |
-| T4 | Capacity exceeded | Order rejected |
-| T5 | Invalid payment | Error shown |
-| T6 | Guest checkout | Works without account |
-
-## Acceptance Criteria
-
-- [ ] Order created atomically
-- [ ] Payment provider integration
-- [ ] Webhook handling with idempotency
-- [ ] Capacity race conditions handled
-- [ ] Guest checkout supported
-- [ ] Order confirmation shown
+## Test Results
+- 25/25 tests passed
+- Coverage: schema, RPCs, edge functions, RLS, capacity validation
+- See: `tests/integration-tests.mjs`
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2025-01-28*
