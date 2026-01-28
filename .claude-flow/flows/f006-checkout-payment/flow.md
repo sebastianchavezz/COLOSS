@@ -2,14 +2,15 @@
 
 **ID**: F006
 **Status**: 🟢 Done
-**Total Sprints**: 2
-**Current Sprint**: S2 Complete
+**Total Sprints**: 3
+**Current Sprint**: S3 Complete
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | S1 | Full checkout flow (order + validation + Mollie + webhook + ticket issuance) | 🟢 |
 | S2 | Mollie Sandbox Integration upgrade | 🟢 |
+| S3 | Waterdichte Mollie Integration (best practices) | 🟢 |
 
 ## Dependencies
 - **Requires**: F005 (Ticket Selection)
@@ -110,6 +111,22 @@ This will:
 Test credentials:
 - **Card**: 4543 4740 0224 9996 (any expiry, any CVV)
 - **iDEAL**: Select any test bank
+
+## Mollie Best Practices Implemented (S3)
+
+| Practice | Implementation |
+|----------|----------------|
+| Verify by re-fetch | Always fetch payment from Mollie API, never trust webhook payload |
+| Return 200 for unknowns | Return 200 OK for unknown IDs (security: no info leakage) |
+| Idempotency | payment_events table with unique constraint |
+| Timeout handling | 10s timeout for Mollie API calls (Mollie times out at 15s) |
+| Retry support | Return 500 for transient errors → Mollie retries 10x over 26h |
+
+Webhook tests: `tests/webhook-tests.mjs` (5/5 passing)
+
+Sources:
+- [Mollie Webhooks](https://docs.mollie.com/reference/webhooks)
+- [Mollie Testing](https://docs.mollie.com/reference/testing)
 
 ---
 
