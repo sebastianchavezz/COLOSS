@@ -267,26 +267,27 @@ serve(async (req: Request) => {
         // =================================================================
         // 8. AUDIT LOG
         // =================================================================
-        await supabaseAdmin
-            .from('audit_log')
-            .insert({
-                org_id: event.org_id,
-                actor_user_id: userId,
-                action: 'ORDER_CREATED',
-                entity_type: 'order',
-                entity_id: order.id,
-                after_state: {
-                    status: 'pending',
-                    total_amount: serverPrice,
-                    item_count: orderItemsPayload.length,
-                    is_guest: !userId
-                },
-                metadata: { event_id, source: 'create-order-public' }
-            })
-            .catch(() => {
-                // Non-fatal: audit log failure should not block the flow
-                logger.warn('Audit log insert failed (non-fatal)')
-            })
+        try {
+            await supabaseAdmin
+                .from('audit_log')
+                .insert({
+                    org_id: event.org_id,
+                    actor_user_id: userId,
+                    action: 'ORDER_CREATED',
+                    entity_type: 'order',
+                    entity_id: order.id,
+                    after_state: {
+                        status: 'pending',
+                        total_amount: serverPrice,
+                        item_count: orderItemsPayload.length,
+                        is_guest: !userId
+                    },
+                    metadata: { event_id, source: 'create-order-public' }
+                })
+        } catch {
+            // Non-fatal: audit log failure should not block the flow
+            logger.warn('Audit log insert failed (non-fatal)')
+        }
 
         // =================================================================
         // 9. BRANCHING: Free vs Paid
@@ -349,6 +350,12 @@ serve(async (req: Request) => {
             if (!mollieApiKey) {
                 logger.error('Missing MOLLIE_API_KEY')
                 return errorResponse('Payment provider not configured', 'MISSING_MOLLIE_KEY', 500)
+            }
+
+            // Detect test mode (key starts with 'test_')
+            const isTestMode = mollieApiKey.startsWith('test_')
+            if (isTestMode) {
+                logger.info('🧪 MOLLIE TEST MODE ACTIVE')
             }
 
             const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -422,18 +429,21 @@ serve(async (req: Request) => {
             }
 
             // Audit log: payment created
-            await supabaseAdmin
-                .from('audit_log')
-                .insert({
-                    org_id: event.org_id,
-                    actor_user_id: userId,
-                    action: 'PAYMENT_CREATED',
-                    entity_type: 'payment',
-                    entity_id: order.id,
-                    after_state: { provider_payment_id: mollieData.id, status: mollieData.status },
-                    metadata: { order_id: order.id }
-                })
-                .catch(() => logger.warn('Audit log failed (non-fatal)'))
+            try {
+                await supabaseAdmin
+                    .from('audit_log')
+                    .insert({
+                        org_id: event.org_id,
+                        actor_user_id: userId,
+                        action: 'PAYMENT_CREATED',
+                        entity_type: 'payment',
+                        entity_id: order.id,
+                        after_state: { provider_payment_id: mollieData.id, status: mollieData.status },
+                        metadata: { order_id: order.id }
+                    })
+            } catch {
+                logger.warn('Audit log failed (non-fatal)')
+            }
 
             return jsonResponse({
                 success: true,
@@ -447,6 +457,7 @@ serve(async (req: Request) => {
                 payment: {
                     provider: 'mollie',
                     payment_id: mollieData.id,
+                    test_mode: isTestMode,
                 },
                 checkout_url: mollieData._links?.checkout?.href,
                 public_token: publicToken
