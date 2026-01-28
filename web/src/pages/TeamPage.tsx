@@ -33,7 +33,8 @@ interface LayoutContext {
 }
 
 export function TeamPage() {
-    const { org } = useOutletContext<LayoutContext>()
+    const context = useOutletContext<LayoutContext>()
+    const org = context?.org
 
     const [members, setMembers] = useState<OrgMember[]>([])
     const [currentRole, setCurrentRole] = useState<AppRole | null>(null)
@@ -122,6 +123,15 @@ export function TeamPage() {
         }
 
         setActionLoading(null)
+    }
+
+    // Guard: wait for org context
+    if (!org) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+        )
     }
 
     if (loading) {
