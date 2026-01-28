@@ -9,7 +9,7 @@
 |----|------|--------|---------|---------|-------|
 | F001 | User Registration | 🟢 | 1/1 | Done | ✅ |
 | F002 | User Login/Auth | 🟢 | 1/1 | Done | ✅ |
-| F003 | Event Creation | 🔴 | 0/3 | - | ⬜ |
+| F003 | Event Creation | 🟢 | 3/3 | Done | ✅ |
 | F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
 | F005 | Ticket Selection | 🟢 | 2/2 | Done | ✅ |
 | F006 | Checkout/Payment | 🟢 | 1/1 | S1 Complete | ✅ |
@@ -34,9 +34,9 @@
 | Metric | Value |
 |--------|-------|
 | Total Flows | 12 |
-| 🔴 Planned | 3 |
+| 🔴 Planned | 2 |
 | 🟡 Active | 1 |
-| 🟢 Done | 8 |
+| 🟢 Done | 9 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
@@ -46,15 +46,15 @@ F001 (User Registration)
   │
   ├──► F002 (User Login)
   │      │
-  │      ├──► F003 (Event Creation)
+  │      ├──► F003 (Event Creation) ✅
   │      │      │
-  │      │      ├──► F004 (Event Discovery)
+  │      │      ├──► F004 (Event Discovery) ✅
   │      │      │      │
-  │      │      │      └──► F005 (Ticket Selection)
+  │      │      │      └──► F005 (Ticket Selection) ✅
   │      │      │             │
-  │      │      │             └──► F006 (Checkout/Payment)
+  │      │      │             └──► F006 (Checkout/Payment) ✅
   │      │      │                    │
-  │      │      │                    ├──► F007 (Ticket Delivery)
+  │      │      │                    ├──► F007 (Ticket Delivery) 🟡
   │      │      │                    │
   │      │      │                    ├──► F009 (Refund)
   │      │      │                    │
@@ -75,9 +75,9 @@ F001 (User Registration)
 
 | Sprint | Focus | Flows | Status |
 |--------|-------|-------|--------|
-| 1 | Authentication | F001, F002 | 🟡 Partial (F001 done) |
-| 2 | Events | F003, F010 | 🔴 Planned |
-| 3 | Discovery | F004, F005 | 🟡 Partial (F005 S1 done) |
+| 1 | Authentication | F001, F002 | 🟢 Complete |
+| 2 | Events | F003, F010 | 🟡 Partial (F003 done) |
+| 3 | Discovery | F004, F005 | 🟢 Complete |
 | 4 | Checkout | F006, F007 | 🟡 Partial (F007 S1 done) |
 | 5 | Support | F008, F009 | 🟡 Partial (F008 done) |
 
@@ -96,6 +96,19 @@ F001 (User Registration)
 │       └── integration-tests.mjs  # 12/12 passing
 ├── f002-user-login/
 │   └── ...
+├── f003-event-creation/
+│   ├── flow.md                    # 🟢 Done
+│   ├── sprints/
+│   │   ├── s1-plan.md             # GPX Routes
+│   │   ├── s1-architecture.md
+│   │   ├── s1-review.md
+│   │   ├── s1-test-report.md
+│   │   ├── s2-plan.md             # Event CRUD
+│   │   └── s3-plan.md             # Event Settings
+│   ├── tests/
+│   │   └── integration-tests.mjs  # 12/12 passing
+│   └── bugs/
+│       └── index.md               # B001 Leaflet fix
 ├── f006-checkout-payment/
 │   ├── flow.md                    # 🟢 Done
 │   ├── sprints/

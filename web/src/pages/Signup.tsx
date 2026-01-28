@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react'
 import { authHelpers } from '../lib/auth-helpers'
 
@@ -12,8 +12,6 @@ export default function Signup() {
     const [lastName, setLastName] = useState('')
     const [loading, setLoading] = useState(false)
     const [message, setMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null)
-
-    const navigate = useNavigate()
 
     const handleGoogleSignup = async () => {
         try {

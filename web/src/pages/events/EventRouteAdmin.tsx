@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { RouteMap } from '../../components/RouteMap';
-import { readGpxFile, formatDistance, ParsedGpx } from '../../lib/gpx';
+import { readGpxFile, formatDistance, type ParsedGpx } from '../../lib/gpx';
 
 interface EventRoute {
   id: string;

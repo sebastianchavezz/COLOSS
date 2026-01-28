@@ -10,8 +10,8 @@
 
 ## Current State
 
-- **Sprint**: F006 Checkout & Payment
-- **Phase**: completed
+- **Sprint**: F003 Event Creation - COMPLETED
+- **Phase**: done
 - **Blockers**: none
 
 ## Architecture Layers
@@ -33,7 +33,8 @@
 - `orgs` - Organisaties
 - `org_members` - Leden per organisatie met rollen
 - `events` - Evenementen
-- `event_settings` - Instellingen per event
+- `event_settings` - Instellingen per event (12 domains)
+- `event_routes` - GPX routes met geometry
 - `participants` - Deelnemers (Auth users of guests)
 - `registrations` - Inschrijvingen
 - `ticket_types` - Ticket soorten
@@ -43,7 +44,7 @@
 - `payments` - Betalingen
 - `audit_log` - Audit trail
 
-### Communication Tables (NEW - Sprint Communication)
+### Communication Tables (Sprint Communication)
 - `email_outbox` - Queue voor alle uitgaande emails
 - `email_outbox_events` - Event sourcing voor status changes
 - `message_batches` - Bulk job tracking
@@ -52,6 +53,12 @@
 - `email_bounces` - Bounce history
 - `message_templates` - Reusable email templates
 
+### Event Communication Tables (F012 - Messaging + FAQ)
+- `chat_threads` - Support threads (1 per participant per event), status: open/pending/closed
+- `chat_messages` - Messages within threads (append-only, max 2000 chars)
+- `chat_thread_reads` - Read receipts for organizers (UPSERT idempotent)
+- `faq_items` - FAQ entries (org-wide or event-specific), status: draft/published
+
 ## Key Decisions
 
 | Date | Decision | Rationale |
@@ -59,12 +66,19 @@
 | 2025-01-27 | RLS-first approach | Security by default |
 | 2025-01-27 | Multi-tenant via org_id | Isolatie per organisatie |
 | 2025-01-27 | Supabase Auth | Native integratie |
+| 2026-01-28 | F003 All sprints complete | Event CRUD + Settings + GPX Routes |
 
 ## Completed Features
 
 - [x] Database schema (7 layers)
 - [x] RLS policies on all tables
 - [x] Multi-tenant isolation
+- [x] **Event Creation Module** (F003 - Complete)
+  - [x] Event CRUD (create, list, detail, update, delete)
+  - [x] Event Settings (12 configuration domains)
+  - [x] GPX Route Import (upload, preview, publish)
+  - [x] Route Map Display (Leaflet)
+  - [x] Role-based permissions
 - [x] **Checkout & Payment Module** (Sprint F006)
   - [x] create-order-public: guest + authenticated checkout
   - [x] Atomic capacity validation (FOR UPDATE SKIP LOCKED)
@@ -82,58 +96,51 @@
   - [x] Unsubscribe/bounce compliance (GDPR)
   - [x] Edge Functions: process-outbox, bulk-email, resend-webhook, unsubscribe
   - [x] Extended communication.* settings domain
+- [x] **Event Communication Module** (F012 - Messaging + FAQ)
+  - [x] Threaded chat between participants and organizers (1 thread per participant per event)
+  - [x] Materialized unread counters with trigger-based maintenance
+  - [x] FAQ management with org-wide and event-specific scoping
+  - [x] Rate limiting via messaging settings domain (configurable per event)
+  - [x] Edge Functions: send-message, get-threads, get-thread-messages, update-thread-status, faq-crud, get-faqs
+  - [x] Helper RPCs: get_or_create_chat_thread, mark_chat_thread_read, check_participant_event_access, get_messaging_settings, count_recent_participant_messages
+  - [x] Full RLS: participant sees own thread, organizer sees org threads, public reads published FAQs
 
 ## Known Issues
 
 - None currently
 
-## Active Sprint
-
-**Sprint Communication - COMPLETED**
-
-| Phase | Status | Notes |
-|-------|--------|-------|
-| Planning | ✅ | Plan in `.claude-flow/sprints/sprint-communication/plan.md` |
-| Design | ✅ | Architecture in `.claude-flow/sprints/sprint-communication/architecture.md` |
-| Implementation | ✅ | 2 migrations, 4 Edge Functions |
-| Review | ✅ | Approved with minor suggestions |
-| Testing | ✅ | RLS + function tests created |
-
----
-
 ## Active Flows
-
-### Current Sprint Focus
-*None - awaiting sprint start*
 
 ### Flow Progress
 
 | Flow | Status | Progress | Blocker |
 |------|--------|----------|---------|
-| F001 | 🔴 Planned | 0% | - |
-| F002 | 🔴 Planned | 0% | F001 |
-| F003 | 🔴 Planned | 0% | F002 |
-| F004 | 🔴 Planned | 0% | F003 |
-| F005 | 🔴 Planned | 0% | F004 |
+| F001 | 🟢 Completed | 100% | - |
+| F002 | 🟢 Completed | 100% | - |
+| F003 | 🟢 Completed | 100% | - |
+| F004 | 🟢 Completed | 100% | - |
+| F005 | 🟢 Completed | 100% | - |
 | F006 | 🟢 Completed | 100% | - |
-| F007 | 🔴 Planned | 0% | F006 |
+| F007 | 🟡 In Progress | 33% | S2, S3 pending |
 | F008 | 🟢 Completed | 100% | - |
-| F009 | 🔴 Planned | 0% | F006 |
-| F010 | 🔴 Planned | 0% | F003 |
+| F009 | 🔴 Planned | 0% | F006 (done) |
+| F010 | 🔴 Planned | 0% | F003 (done) |
+| F011 | 🟢 Completed | 100% | - |
+| F012 | 🟢 Completed | 100% | - |
 
-### Upcoming Flows (Sprint 1)
-- F001: User Registration
-- F002: User Login/Auth
+### Upcoming Flows
+- F007 S2/S3: Ticket Delivery (QR display, check-in UI)
+- F009: Refund Flow
+- F010: Organizer Dashboard
 
 ---
 
 ## Next Actions
 
-1. Start Sprint 1 met @pm
-2. Focus op F001 (User Registration) en F002 (User Login)
-3. @architect designs authentication flows
-4. @backend implementeert Edge Functions
+1. Continue F007 S2: Ticket display UI improvements
+2. Start F009: Refund Flow
+3. Start F010: Organizer Dashboard
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2026-01-28*

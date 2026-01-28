@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { MapPin, Calendar, Clock, Mail, ArrowLeft, Loader2, Ticket, AlertCircle } from 'lucide-react'
+import { MapPin, Calendar, Mail, ArrowLeft, Loader2, Ticket, AlertCircle } from 'lucide-react'
 
 interface TicketType {
     id: string
