@@ -1,22 +1,60 @@
 /**
- * PublicEventPage
- * 
+ * PublicEventCheckout
+ *
  * Public checkout pagina - geen auth vereist
  * Route: /e/:eventSlug
- * 
+ *
  * Features:
  * - Toon event details
- * - Lijst published tickets met quantity selectors
+ * - Lijst published tickets met real-time availability
+ * - Sold out states + max per participant limits
  * - Checkout form (email + optionele naam)
+ * - Pre-checkout validation via RPC
  * - Call create-order-public Edge Function
  * - Redirect naar confirmation page
  */
 
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Calendar, MapPin, Ticket, Loader2, ShoppingCart } from 'lucide-react'
+import { Calendar, MapPin, Ticket, Loader2, ShoppingCart, AlertCircle } from 'lucide-react'
 import { getPublicEventBySlug } from '../../data/public_events'
 import { supabase } from '../../lib/supabase'
+
+// Ticket type with availability info from RPC
+interface TicketWithAvailability {
+    id: string
+    name: string
+    description: string | null
+    price: number
+    currency: string
+    vat_percentage: number | null
+    capacity_total: number
+    sold_count: number
+    available_count: number
+    is_sold_out: boolean
+    distance_value: number | null
+    distance_unit: string | null
+    ticket_category: string | null
+    max_per_participant: number | null
+    image_url: string | null
+    sales_start: string | null
+    sales_end: string | null
+    on_sale: boolean
+    sort_order: number | null
+    time_slots: any[]
+}
+
+// Validation error from RPC
+interface ValidationError {
+    ticket_type_id?: string
+    ticket_name?: string
+    error: string
+    requested?: number
+    available?: number
+    max_allowed?: number
+    sales_start?: string
+    sales_end?: string
+}
 
 export function PublicEventCheckout() {
     const { eventSlug } = useParams<{ eventSlug: string }>()
@@ -24,12 +62,14 @@ export function PublicEventCheckout() {
 
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
     const [event, setEvent] = useState<any>(null)
-    const [tickets, setTickets] = useState<any[]>([])
+    const [tickets, setTickets] = useState<TicketWithAvailability[]>([])
     const [quantities, setQuantities] = useState<Record<string, number>>({})
     const [email, setEmail] = useState('')
     const [name, setName] = useState('')
     const [submitting, setSubmitting] = useState(false)
+    const [validating, setValidating] = useState(false)
     const [showCheckout, setShowCheckout] = useState(false)
 
     useEffect(() => {
@@ -58,20 +98,18 @@ export function PublicEventCheckout() {
 
             setEvent(eventData)
 
-            // Fetch published tickets
-            const { data: ticketsData, error: ticketsError } = await supabase
-                .from('ticket_types')
-                .select('id, name, description, price, currency, capacity_total, status')
-                .eq('event_id', eventData.id)
-                .eq('status', 'published')
-                .is('deleted_at', null)
-                .order('sort_order', { ascending: true })
+            // Fetch tickets with availability via RPC
+            const { data: availabilityData, error: availabilityError } = await supabase
+                .rpc('get_ticket_availability', { _event_id: eventData.id })
 
-            if (ticketsError) {
-                console.error('[PublicEvent] Tickets error:', ticketsError)
+            if (availabilityError) {
+                console.error('[PublicEvent] Availability error:', availabilityError)
+                setError('Kon tickets niet ophalen')
+            } else if (availabilityData?.error) {
+                console.error('[PublicEvent] Availability RPC error:', availabilityData.error)
                 setError('Kon tickets niet ophalen')
             } else {
-                setTickets(ticketsData || [])
+                setTickets(availabilityData?.ticket_types || [])
             }
 
             setLoading(false)
@@ -81,11 +119,59 @@ export function PublicEventCheckout() {
     }, [eventSlug])
 
     const handleQuantityChange = (ticketId: string, delta: number) => {
+        const ticket = tickets.find(t => t.id === ticketId)
+        if (!ticket) return
+
+        // Calculate max allowed quantity
+        const maxAllowed = Math.min(
+            ticket.available_count,
+            ticket.max_per_participant ?? 99
+        )
+
         setQuantities(prev => {
             const current = prev[ticketId] || 0
-            const newQty = Math.max(0, current + delta)
+            const newQty = Math.max(0, Math.min(maxAllowed, current + delta))
             return { ...prev, [ticketId]: newQty }
         })
+
+        // Clear validation errors when quantity changes
+        setValidationErrors([])
+    }
+
+    // Get max quantity for a ticket
+    const getMaxQuantity = (ticket: TicketWithAvailability): number => {
+        return Math.min(
+            ticket.available_count,
+            ticket.max_per_participant ?? 99
+        )
+    }
+
+    // Check if ticket can be selected
+    const isTicketDisabled = (ticket: TicketWithAvailability): boolean => {
+        return ticket.is_sold_out || !ticket.on_sale
+    }
+
+    // Get status badge for ticket
+    const getTicketStatusBadge = (ticket: TicketWithAvailability): { text: string; className: string } | null => {
+        if (ticket.is_sold_out) {
+            return { text: 'Uitverkocht', className: 'bg-red-100 text-red-800' }
+        }
+        if (!ticket.on_sale && ticket.sales_start && new Date(ticket.sales_start) > new Date()) {
+            return { text: 'Binnenkort', className: 'bg-yellow-100 text-yellow-800' }
+        }
+        if (!ticket.on_sale && ticket.sales_end && new Date(ticket.sales_end) < new Date()) {
+            return { text: 'Verkoop gesloten', className: 'bg-gray-100 text-gray-800' }
+        }
+        if (ticket.available_count <= 5 && ticket.available_count > 0) {
+            return { text: `Nog ${ticket.available_count}`, className: 'bg-orange-100 text-orange-800' }
+        }
+        return null
+    }
+
+    // Format distance badge
+    const formatDistanceBadge = (ticket: TicketWithAvailability): string | null => {
+        if (!ticket.distance_value) return null
+        return `${ticket.distance_value} ${ticket.distance_unit || 'km'}`
     }
 
     const totalItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0)
@@ -93,6 +179,69 @@ export function PublicEventCheckout() {
         const qty = quantities[ticket.id] || 0
         return sum + (ticket.price * qty)
     }, 0)
+
+    // Validate order before checkout
+    const validateOrder = async (): Promise<boolean> => {
+        if (!event) return false
+
+        setValidating(true)
+        setValidationErrors([])
+
+        const items = Object.entries(quantities)
+            .filter(([_, qty]) => qty > 0)
+            .map(([ticketId, qty]) => ({
+                ticket_type_id: ticketId,
+                quantity: qty
+            }))
+
+        const { data, error: rpcError } = await supabase
+            .rpc('validate_ticket_order', {
+                _event_id: event.id,
+                _items: items
+            })
+
+        setValidating(false)
+
+        if (rpcError) {
+            console.error('[PublicEvent] Validation RPC error:', rpcError)
+            setError('Kon bestelling niet valideren')
+            return false
+        }
+
+        if (!data?.valid) {
+            setValidationErrors(data?.errors || [])
+            return false
+        }
+
+        return true
+    }
+
+    // Translate validation error codes
+    const translateError = (err: ValidationError): string => {
+        const ticketName = err.ticket_name || 'Ticket'
+        switch (err.error) {
+            case 'NO_ITEMS':
+                return 'Selecteer minimaal één ticket'
+            case 'EVENT_NOT_FOUND':
+                return 'Event niet gevonden of niet beschikbaar'
+            case 'TICKET_TYPE_NOT_FOUND':
+                return `${ticketName}: Ticket type niet gevonden`
+            case 'TICKET_NOT_PUBLISHED':
+                return `${ticketName}: Ticket is niet beschikbaar`
+            case 'TICKET_NOT_VISIBLE':
+                return `${ticketName}: Ticket is niet beschikbaar`
+            case 'SALES_NOT_STARTED':
+                return `${ticketName}: Verkoop nog niet gestart`
+            case 'SALES_ENDED':
+                return `${ticketName}: Verkoop is gesloten`
+            case 'INSUFFICIENT_CAPACITY':
+                return `${ticketName}: Niet genoeg tickets beschikbaar (${err.available} over, ${err.requested} gevraagd)`
+            case 'EXCEEDS_MAX_PER_PARTICIPANT':
+                return `${ticketName}: Maximum ${err.max_allowed} per bestelling`
+            default:
+                return `${ticketName}: ${err.error}`
+        }
+    }
 
     const handleCheckout = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -109,8 +258,16 @@ export function PublicEventCheckout() {
 
         setSubmitting(true)
         setError(null)
+        setValidationErrors([])
 
         try {
+            // Pre-validate order
+            const isValid = await validateOrder()
+            if (!isValid) {
+                setSubmitting(false)
+                return
+            }
+
             // Build items array
             const items = Object.entries(quantities)
                 .filter(([_, qty]) => qty > 0)
@@ -214,45 +371,87 @@ export function PublicEventCheckout() {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {tickets.map(ticket => (
-                                    <div key={ticket.id} className="bg-white rounded-lg shadow p-6">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                                <h3 className="text-lg font-medium text-gray-900">{ticket.name}</h3>
-                                                {ticket.description && (
-                                                    <p className="mt-1 text-sm text-gray-500">{ticket.description}</p>
-                                                )}
-                                                <p className="mt-2 text-2xl font-bold text-indigo-600">
-                                                    {ticket.price === 0 ? (
-                                                        'Gratis'
-                                                    ) : (
-                                                        `€${ticket.price.toFixed(2)}`
-                                                    )}
-                                                </p>
-                                            </div>
+                                {tickets.map(ticket => {
+                                    const disabled = isTicketDisabled(ticket)
+                                    const statusBadge = getTicketStatusBadge(ticket)
+                                    const distanceBadge = formatDistanceBadge(ticket)
+                                    const maxQty = getMaxQuantity(ticket)
+                                    const currentQty = quantities[ticket.id] || 0
 
-                                            {/* Quantity selector */}
-                                            <div className="flex items-center space-x-3">
-                                                <button
-                                                    onClick={() => handleQuantityChange(ticket.id, -1)}
-                                                    disabled={!quantities[ticket.id]}
-                                                    className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 disabled:opacity-30"
-                                                >
-                                                    −
-                                                </button>
-                                                <span className="w-8 text-center font-medium">
-                                                    {quantities[ticket.id] || 0}
-                                                </span>
-                                                <button
-                                                    onClick={() => handleQuantityChange(ticket.id, 1)}
-                                                    className="w-8 h-8 rounded-full border-2 border-indigo-600 bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700"
-                                                >
-                                                    +
-                                                </button>
+                                    return (
+                                        <div
+                                            key={ticket.id}
+                                            className={`bg-white rounded-lg shadow p-6 ${disabled ? 'opacity-60' : ''}`}
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex-1">
+                                                    {/* Title + badges */}
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <h3 className="text-lg font-medium text-gray-900">{ticket.name}</h3>
+                                                        {distanceBadge && (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                                {distanceBadge}
+                                                            </span>
+                                                        )}
+                                                        {ticket.ticket_category && (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                                                {ticket.ticket_category}
+                                                            </span>
+                                                        )}
+                                                        {statusBadge && (
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusBadge.className}`}>
+                                                                {statusBadge.text}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {ticket.description && (
+                                                        <p className="mt-1 text-sm text-gray-500">{ticket.description}</p>
+                                                    )}
+
+                                                    {/* Availability info */}
+                                                    {!disabled && (
+                                                        <p className="mt-1 text-xs text-gray-400">
+                                                            {ticket.available_count} van {ticket.capacity_total} beschikbaar
+                                                            {ticket.max_per_participant && (
+                                                                <span> · Max {ticket.max_per_participant} per bestelling</span>
+                                                            )}
+                                                        </p>
+                                                    )}
+
+                                                    <p className="mt-2 text-2xl font-bold text-indigo-600">
+                                                        {ticket.price === 0 ? (
+                                                            'Gratis'
+                                                        ) : (
+                                                            `€${ticket.price.toFixed(2)}`
+                                                        )}
+                                                    </p>
+                                                </div>
+
+                                                {/* Quantity selector */}
+                                                <div className="flex items-center space-x-3">
+                                                    <button
+                                                        onClick={() => handleQuantityChange(ticket.id, -1)}
+                                                        disabled={disabled || currentQty === 0}
+                                                        className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    >
+                                                        −
+                                                    </button>
+                                                    <span className="w-8 text-center font-medium">
+                                                        {currentQty}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => handleQuantityChange(ticket.id, 1)}
+                                                        disabled={disabled || currentQty >= maxQty}
+                                                        className="w-8 h-8 rounded-full border-2 border-indigo-600 bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    >
+                                                        +
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         )}
                     </div>
@@ -313,6 +512,20 @@ export function PublicEventCheckout() {
                                         />
                                     </div>
 
+                                    {/* Validation errors */}
+                                    {validationErrors.length > 0 && (
+                                        <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                                            <div className="flex items-start">
+                                                <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
+                                                <div className="text-sm text-red-800">
+                                                    {validationErrors.map((err, idx) => (
+                                                        <p key={idx}>{translateError(err)}</p>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {error && (
                                         <div className="bg-red-50 border border-red-200 rounded-md p-3">
                                             <p className="text-sm text-red-800">{error}</p>
@@ -321,13 +534,13 @@ export function PublicEventCheckout() {
 
                                     <button
                                         type="submit"
-                                        disabled={submitting || !email || totalItems === 0}
+                                        disabled={submitting || validating || !email || totalItems === 0}
                                         className="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        {submitting ? (
+                                        {submitting || validating ? (
                                             <>
                                                 <Loader2 className="inline animate-spin mr-2 h-4 w-4" />
-                                                Bezig met bestellen...
+                                                {validating ? 'Valideren...' : 'Bezig met bestellen...'}
                                             </>
                                         ) : (
                                             'Bestelling plaatsen'

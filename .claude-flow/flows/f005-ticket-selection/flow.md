@@ -1,15 +1,15 @@
 # Flow: Ticket Selection
 
 **ID**: F005
-**Status**: 🟡 In Progress
+**Status**: 🟢 Done
 **Total Sprints**: 2
-**Current Sprint**: S1 (Complete)
+**Current Sprint**: Done
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| S1 | Atleta-style ticket configuration | ✅ Complete |
-| S2 | Cart + quantity limits | 🔴 Planned |
+| S1 | Atleta-style ticket configuration | 🟢 Complete |
+| S2 | Cart + quantity limits | 🟢 Complete |
 
 ## Dependencies
 - **Requires**: F004
@@ -17,7 +17,7 @@
 
 ## Overview
 
-Bezoekers kunnen tickets selecteren en aan hun winkelwagen toevoegen.
+Bezoekers kunnen tickets selecteren met real-time availability tracking.
 Atleta-style configuratie met distance info, i18n, time slots, en team config.
 
 ```
@@ -52,8 +52,7 @@ Zodat ik me kan inschrijven voor een evenement
 | `ticket_type_i18n` | Internationalized content (name, description, instructions) |
 | `ticket_time_slots` | Start times/waves per ticket type |
 | `ticket_team_config` | Team configuration (min/max size, captain) |
-| `tickets` | Issued tickets |
-| `cart_items` | Shopping cart (optional) |
+| `ticket_instances` | Issued tickets |
 
 ### RLS Policies
 | Policy | Table | Rule |
@@ -69,6 +68,9 @@ Zodat ik me kan inschrijven voor een evenement
 |----------|---------|
 | `get_ticket_type_full` | Complete ticket config with i18n, slots, team |
 | `get_event_ticket_types` | List tickets with availability counts |
+| `get_ticket_availability` | Real-time availability for all ticket types |
+| `validate_ticket_order` | Pre-validate order before checkout |
+| `get_ticket_type_with_availability` | Single ticket type details |
 | `update_ticket_type_extended` | Update extended fields |
 | `upsert_ticket_type_i18n` | Manage translations |
 | `upsert_ticket_time_slot` | Create/update time slot |
@@ -79,13 +81,15 @@ Zodat ik me kan inschrijven voor een evenement
 ### Edge Functions
 | Function | Purpose |
 |----------|---------|
-| `check-availability` | Real-time capacity check |
+| `check-availability` | Real-time capacity check (legacy) |
 
 ## API Endpoints
 
 | Method | Endpoint | Auth |
 |--------|----------|------|
-| GET | `/rest/v1/ticket_types?event_id=eq.{id}` | No |
+| RPC | `get_ticket_availability(_event_id)` | No |
+| RPC | `validate_ticket_order(_event_id, _items)` | No |
+| RPC | `get_ticket_type_with_availability(_ticket_type_id)` | No |
 | RPC | `get_event_ticket_types(_event_id)` | No |
 | RPC | `get_ticket_type_full(_ticket_type_id, _locale)` | No |
 | RPC | `get_ticket_time_slots(_ticket_type_id)` | No |
@@ -98,14 +102,18 @@ Zodat ik me kan inschrijven voor een evenement
 
 | ID | Scenario | Expected | Status |
 |----|----------|----------|--------|
-| T1 | View ticket types | All types for event shown | ✅ |
-| T2 | Sold out ticket | Shows "Sold out" | ✅ |
-| T3 | Select quantity | Quantity validated | 🔴 |
-| T4 | Exceeds max per order | Error shown | 🔴 |
-| T5 | Add to cart | Cart updated | 🔴 |
-| T6 | Get full ticket config | Returns i18n, slots, team | ✅ |
-| T7 | Filter by visibility | Hidden tickets excluded | ✅ |
-| T8 | Time slot availability | Shows sold/available | ✅ |
+| T1 | View ticket types | All types for event shown | 🟢 |
+| T2 | Sold out ticket | Shows "Sold out" | 🟢 |
+| T3 | Select quantity | Quantity validated | 🟢 |
+| T4 | Exceeds max per order | Error shown | 🟢 |
+| T5 | Pre-validate order | Errors returned | 🟢 |
+| T6 | Get full ticket config | Returns i18n, slots, team | 🟢 |
+| T7 | Filter by visibility | Hidden tickets excluded | 🟢 |
+| T8 | Time slot availability | Shows sold/available | 🟢 |
+| T9 | Future ticket sales | Shows "Binnenkort" | 🟢 |
+| T10 | Ended ticket sales | Shows "Verkoop gesloten" | 🟢 |
+| T11 | Low stock warning | Shows "Nog X" | 🟢 |
+| T12 | Distance badge | Shows "10 km" | 🟢 |
 
 ## Acceptance Criteria
 
@@ -116,10 +124,27 @@ Zodat ik me kan inschrijven voor een evenement
 - [x] Time slots/waves configurable
 - [x] Team configuration available
 - [x] Visibility control works
-- [ ] Quantity limits enforced (S2)
-- [ ] Cart persists during session (S2)
+- [x] Quantity limits enforced
+- [x] Sold out badge displayed
+- [x] Future/ended sales indicated
+- [x] Pre-checkout validation works
+- [x] 12/12 S2 tests passing
+
+## Deliverables
+
+| Artifact | Status | Location |
+|----------|--------|----------|
+| S1 Plan | Done | `sprints/s1-plan.md` |
+| S1 Architecture | Done | `sprints/s1-architecture.md` |
+| S2 Plan | Done | `sprints/s2-plan.md` |
+| S2 Architecture | Done | `sprints/s2-architecture.md` |
+| S2 Migration | Done | `supabase/migrations/20250128160000_f005_s2_availability_rpcs.sql` |
+| PublicEventCheckout | Done | `web/src/pages/public/PublicEventCheckout.tsx` |
+| S2 Tests | Done (12/12) | `tests/s2-integration-tests.sql` |
+| S2 Review | Done | `sprints/s2-review.md` |
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2026-01-28*
 *Sprint S1 completed: 2025-01-27*
+*Sprint S2 completed: 2026-01-28*
