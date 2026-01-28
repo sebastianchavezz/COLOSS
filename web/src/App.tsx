@@ -48,6 +48,7 @@ import { EventRouteTab } from './pages/events/EventRouteTab'
 import { EventRoute } from './pages/public/EventRoute'
 import { EventInvitations } from './pages/EventInvitations'
 import { PublicInvite } from './pages/public/PublicInvite'
+import { TeamPage } from './pages/TeamPage'
 
 function App() {
   return (
@@ -111,8 +112,8 @@ function App() {
                 <Route path="settings" element={<EventSettings />} />
               </Route>
 
-              {/* Placeholder routes voor sidebar navigatie */}
-              <Route path="team" element={<div className="p-4 text-gray-500">Team Management - Coming soon</div>} />
+              {/* Org-level routes */}
+              <Route path="team" element={<TeamPage />} />
               <Route path="finance" element={<div className="p-4 text-gray-500">Finance Dashboard - Coming soon</div>} />
               <Route path="settings" element={<div className="p-4 text-gray-500">Organisatie Instellingen - Coming soon</div>} />
             </Route>
