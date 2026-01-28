@@ -1,15 +1,14 @@
 # Flow: Event Discovery
 
 **ID**: F004
-**Status**: 🔴 Planned
-**Total Sprints**: 2
-**Current Sprint**: -
+**Status**: 🟢 Done
+**Total Sprints**: 1
+**Current Sprint**: Done
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| S1 | Public event listing | 🔴 |
-| S2 | Search + Filter | 🔴 |
+| S1 | Public Event Listing + Detail + Search | 🟢 Done |
 
 ## Dependencies
 - **Requires**: F003
@@ -72,12 +71,26 @@ Zodat ik interessante evenementen kan vinden
 
 ## Acceptance Criteria
 
-- [ ] Only published events visible publicly
-- [ ] Draft events hidden from public
-- [ ] Event detail page works
-- [ ] Search functionality works
-- [ ] Filter by date/location works
+- [x] Only published events visible publicly
+- [x] Draft events hidden from public
+- [x] Event detail page works
+- [x] Search functionality works
+- [x] Filter by date works
+- [x] Pagination works
+
+## Deliverables
+
+| Artifact | Status | Location |
+|----------|--------|----------|
+| Sprint Plan | Done | `sprints/s1-plan.md` |
+| Architecture | Done | `sprints/s1-architecture.md` |
+| SQL Migration | Done | `supabase/migrations/20250128150000_f004_event_discovery.sql` |
+| PublicEvents Page | Done | `web/src/pages/public/PublicEvents.tsx` |
+| PublicEventDetail Page | Done | `web/src/pages/public/PublicEventDetail.tsx` |
+| Integration Tests | Done (12/12) | `tests/integration-tests.mjs` |
+| Review | Approved | `sprints/s1-review.md` |
+| Test Report | Done | `sprints/s1-test-report.md` |
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2026-01-28*

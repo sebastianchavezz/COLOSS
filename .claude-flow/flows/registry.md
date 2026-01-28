@@ -10,7 +10,7 @@
 | F001 | User Registration | 🟢 | 1/1 | Done | ✅ |
 | F002 | User Login/Auth | 🟢 | 1/1 | Done | ✅ |
 | F003 | Event Creation | 🔴 | 0/3 | - | ⬜ |
-| F004 | Event Discovery | 🔴 | 0/2 | - | ⬜ |
+| F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
 | F005 | Ticket Selection | 🟡 | 1/2 | S1 Complete | ✅ |
 | F006 | Checkout/Payment | 🟢 | 1/1 | S1 Complete | ✅ |
 | F007 | Ticket Delivery | 🟡 | 1/3 | S1 Complete | ✅ |
@@ -34,9 +34,9 @@
 | Metric | Value |
 |--------|-------|
 | Total Flows | 12 |
-| 🔴 Planned | 4 |
+| 🔴 Planned | 3 |
 | 🟡 Active | 2 |
-| 🟢 Done | 6 |
+| 🟢 Done | 7 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
