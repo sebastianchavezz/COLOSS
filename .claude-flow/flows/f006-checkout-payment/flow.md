@@ -2,13 +2,14 @@
 
 **ID**: F006
 **Status**: 🟢 Done
-**Total Sprints**: 1 (consolidated)
-**Current Sprint**: S1 Complete
+**Total Sprints**: 2
+**Current Sprint**: S2 Complete
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | S1 | Full checkout flow (order + validation + Mollie + webhook + ticket issuance) | 🟢 |
+| S2 | Mollie Sandbox Integration upgrade | 🟢 |
 
 ## Dependencies
 - **Requires**: F005 (Ticket Selection)
@@ -93,6 +94,22 @@ Zodat ik mijn tickets ontvang na succesvolle betaling
 - 25/25 tests passed
 - Coverage: schema, RPCs, edge functions, RLS, capacity validation
 - See: `tests/integration-tests.mjs`
+
+## Mollie Sandbox Testing (S2)
+
+Run the E2E sandbox test:
+```bash
+node .claude-flow/flows/f006-checkout-payment/tests/e2e-sandbox-test.mjs
+```
+
+This will:
+1. Find a published event with paid tickets
+2. Create an order via create-order-public
+3. Return a Mollie checkout URL
+
+Test credentials:
+- **Card**: 4543 4740 0224 9996 (any expiry, any CVV)
+- **iDEAL**: Select any test bank
 
 ---
 
