@@ -1,29 +1,30 @@
 /**
  * mollie-webhook Edge Function
  *
- * Processes Mollie payment webhook notifications.
- * Called by Mollie when a payment status changes.
+ * Processes Mollie payment AND refund webhook notifications.
+ * Called by Mollie when a payment or refund status changes.
  *
  * Security:
- * - Webhook verified by re-fetching payment from Mollie API (not trusting payload)
+ * - Webhook verified by re-fetching from Mollie API (not trusting payload)
  * - Idempotency via payment_events table (unique constraint on provider_event_id)
  * - Returns 200 for duplicates (stops Mollie retries)
  * - Returns 500 for transient errors (Mollie will retry)
  *
  * Flow:
- * 1. Parse webhook (form data with payment ID)
- * 2. Re-fetch from Mollie API (verification + authoritative status)
- * 3. Idempotency check via payment_events
- * 4. Call handle_payment_webhook RPC (atomic: status update + ticket issuance + email)
- * 5. Mark event as processed
- * 6. Return 200 OK
+ * 1. Parse webhook (form data with payment/refund ID)
+ * 2. Detect type: payment (tr_xxx) or refund (re_xxx)
+ * 3. Re-fetch from Mollie API (verification + authoritative status)
+ * 4. Idempotency check via payment_events
+ * 5. Call appropriate RPC
+ * 6. Mark event as processed
+ * 7. Return 200 OK
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { getServiceClient } from '../_shared/supabase.ts'
 import { createLogger } from '../_shared/logger.ts'
 
-const MOLLIE_API_URL = "https://api.mollie.com/v2/payments"
+const MOLLIE_API_URL = "https://api.mollie.com/v2"
 
 serve(async (req: Request) => {
     const logger = createLogger('mollie-webhook')
@@ -40,23 +41,33 @@ serve(async (req: Request) => {
             return new Response('Missing id', { status: 400 })
         }
 
-        logger.info('Processing webhook', { paymentId: String(molliePaymentId) })
+        logger.info('Processing webhook', { id: String(molliePaymentId) })
 
         // 2. SETUP ADMIN CLIENT
         const supabaseAdmin = getServiceClient()
 
-        // 3. FETCH FROM MOLLIE (Webhook verification)
-        // We never trust the webhook payload directly — always re-fetch from Mollie API.
-        // This prevents spoofed webhooks and ensures we have the authoritative status.
         const mollieApiKey = Deno.env.get('MOLLIE_API_KEY')
         if (!mollieApiKey) {
             logger.error('Missing MOLLIE_API_KEY environment variable')
             return new Response('Server Error', { status: 500 })
         }
 
+        // 2.5 DETECT TYPE: Payment (tr_xxx) or Refund (re_xxx)
+        const idStr = String(molliePaymentId)
+        const isRefund = idStr.startsWith('re_')
+
+        if (isRefund) {
+            // ========== REFUND WEBHOOK ==========
+            return await handleRefundWebhook(idStr, mollieApiKey, supabaseAdmin, logger)
+        }
+
+        // ========== PAYMENT WEBHOOK ==========
+        // 3. FETCH FROM MOLLIE (Webhook verification)
+        // We never trust the webhook payload directly — always re-fetch from Mollie API.
+        // This prevents spoofed webhooks and ensures we have the authoritative status.
         let molliePayment: any
         try {
-            const mollieResponse = await fetch(`${MOLLIE_API_URL}/${molliePaymentId}`, {
+            const mollieResponse = await fetch(`${MOLLIE_API_URL}/payments/${molliePaymentId}`, {
                 headers: { 'Authorization': `Bearer ${mollieApiKey}` }
             })
 
@@ -180,3 +191,82 @@ serve(async (req: Request) => {
         return new Response('Internal Server Error', { status: 500 })
     }
 })
+
+/**
+ * Handle refund webhook from Mollie
+ */
+async function handleRefundWebhook(
+    mollieRefundId: string,
+    mollieApiKey: string,
+    supabaseAdmin: any,
+    logger: any
+): Promise<Response> {
+    logger.info('Processing REFUND webhook', { refundId: mollieRefundId })
+
+    // Fetch refund from Mollie
+    let mollieRefund: any
+    try {
+        const refundResponse = await fetch(`${MOLLIE_API_URL}/refunds/${mollieRefundId}`, {
+            headers: { 'Authorization': `Bearer ${mollieApiKey}` }
+        })
+
+        if (!refundResponse.ok) {
+            logger.error('Mollie refund fetch failed', { status: refundResponse.status, refundId: mollieRefundId })
+            return new Response('Mollie API Error', { status: 502 })
+        }
+
+        mollieRefund = await refundResponse.json()
+    } catch (fetchErr) {
+        logger.error('Mollie refund fetch exception', fetchErr)
+        return new Response('Mollie API Unreachable', { status: 502 })
+    }
+
+    const { status } = mollieRefund
+    logger.info('Refund status from Mollie', { refundId: mollieRefundId, status })
+
+    // Idempotency check
+    const eventKey = `refund:${mollieRefundId}:${status}`
+    const { error: eventError } = await supabaseAdmin
+        .from('payment_events')
+        .insert({
+            provider: 'mollie',
+            provider_event_id: eventKey,
+            provider_payment_id: mollieRefundId,
+            event_type: `refund.${status}`,
+            payload: mollieRefund,
+            processed_at: null
+        })
+
+    if (eventError) {
+        if (eventError.code === '23505') {
+            logger.info('Refund event already processed (idempotent)', { eventKey })
+            return new Response('OK', { status: 200 })
+        }
+        logger.error('DB Error inserting refund event', { error: eventError, eventKey })
+        return new Response('Database Error', { status: 500 })
+    }
+
+    // Call RPC to handle refund status update
+    const { data: result, error: rpcError } = await supabaseAdmin.rpc('handle_refund_webhook', {
+        _mollie_refund_id: mollieRefundId,
+        _status: status,
+        _refunded_at: status === 'refunded' ? new Date().toISOString() : null
+    })
+
+    if (rpcError) {
+        logger.error('RPC handle_refund_webhook failed', { error: rpcError.message, refundId: mollieRefundId })
+        return new Response('Transaction Failed', { status: 500 })
+    }
+
+    logger.info('Refund webhook processed', { result })
+
+    // Mark event as processed
+    await supabaseAdmin
+        .from('payment_events')
+        .update({ processed_at: new Date().toISOString() })
+        .eq('provider', 'mollie')
+        .eq('provider_event_id', eventKey)
+
+    logger.info('Refund webhook completed', { refundId: mollieRefundId, status })
+    return new Response('OK', { status: 200 })
+}
