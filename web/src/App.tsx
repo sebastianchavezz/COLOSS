@@ -30,6 +30,8 @@ import { EventOrders } from './pages/EventOrders'
 import { EventParticipants } from './pages/EventParticipants'
 import { PublicEventCheckout } from './pages/public/PublicEventCheckout'
 import { PublicConfirm } from './pages/public/PublicConfirm'
+import { PublicEvents } from './pages/public/PublicEvents'
+import { PublicEventDetail } from './pages/public/PublicEventDetail'
 import { ParticipantChat } from './pages/ParticipantChat'
 import { PublicFaq } from './pages/PublicFaq'
 import Login from './pages/Login'
@@ -57,6 +59,10 @@ function App() {
           <Route path="/e/:eventSlug/confirm" element={<PublicConfirm />} />
           <Route path="/e/:eventSlug/chat" element={<ParticipantChat />} />
           <Route path="/e/:eventSlug/faq" element={<PublicFaq />} />
+
+          {/* Public Event Discovery */}
+          <Route path="/events" element={<PublicEvents />} />
+          <Route path="/events/:slug" element={<PublicEventDetail />} />
 
           {/* Protected Routes Wrapper */}
           <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
