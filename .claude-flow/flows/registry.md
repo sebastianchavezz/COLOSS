@@ -15,7 +15,7 @@
 | F006 | Checkout/Payment | 🟢 | 1/1 | S1 Complete | ✅ |
 | F007 | Ticket Delivery | 🟡 | 1/3 | S1 Complete | ✅ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
-| F009 | Refund Flow | 🔴 | 0/2 | - | ⬜ |
+| F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
 | F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
 | F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
 | F012 | Event Communication (Messaging + FAQ) | 🟢 | 1/1 | Done | ✅ |
@@ -34,9 +34,9 @@
 | Metric | Value |
 |--------|-------|
 | Total Flows | 12 |
-| 🔴 Planned | 2 |
+| 🔴 Planned | 1 |
 | 🟡 Active | 1 |
-| 🟢 Done | 9 |
+| 🟢 Done | 10 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
@@ -56,7 +56,7 @@ F001 (User Registration)
   │      │      │                    │
   │      │      │                    ├──► F007 (Ticket Delivery) 🟡
   │      │      │                    │
-  │      │      │                    ├──► F009 (Refund)
+  │      │      │                    ├──► F009 (Refund) ✅
   │      │      │                    │
   │      │      │                    └──► F011 (Participants/Registrations) ✅
   │      │      │
@@ -79,7 +79,7 @@ F001 (User Registration)
 | 2 | Events | F003, F010 | 🟡 Partial (F003 done) |
 | 3 | Discovery | F004, F005 | 🟢 Complete |
 | 4 | Checkout | F006, F007 | 🟡 Partial (F007 S1 done) |
-| 5 | Support | F008, F009 | 🟡 Partial (F008 done) |
+| 5 | Support | F008, F009 | 🟢 Complete |
 
 ## Directory Structure
 
@@ -133,6 +133,14 @@ F001 (User Registration)
 │   │   ├── s1-review.md
 │   │   └── s1-test-report.md
 │   └── tests/
+├── f009-refund-flow/
+│   ├── flow.md                    # 🟢 Done
+│   ├── sprints/
+│   │   ├── s1-plan.md
+│   │   ├── s1-architecture.md
+│   │   └── s1-review.md
+│   └── tests/
+│       └── integration-tests.mjs  # 10/10 passing
 ├── f012-event-communication/
 │   ├── flow.md                    # 🟢 Done
 │   ├── sprints/

@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Status**: 🟡 Active
+**Status**: 🟢 Done
 **Priority**: High
 **Dependencies**: F006 (Checkout/Payment) ✅
 
@@ -19,22 +19,42 @@ Implementeer een waterdichte refund flow die organizers in staat stelt om bestel
 
 ## Acceptance Criteria
 
-- [ ] Full refund: volledige orderbedrag terugbetalen
-- [ ] Partial refund: gedeeltelijk bedrag terugbetalen
-- [ ] Idempotency: geen dubbele refunds
-- [ ] Mollie integration: API calls naar Mollie Refunds API
-- [ ] Webhook handling: status updates van Mollie
-- [ ] Audit logging: alle refund acties gelogd
-- [ ] Email notification: bevestiging naar klant
-- [ ] RLS: alleen org admins/owners kunnen refunden
-- [ ] Ticket voiding: tickets worden ongeldig bij full refund
+- [x] Full refund: volledige orderbedrag terugbetalen
+- [x] Partial refund: gedeeltelijk bedrag terugbetalen
+- [x] Idempotency: geen dubbele refunds
+- [x] Mollie integration: API calls naar Mollie Refunds API
+- [x] Webhook handling: status updates van Mollie
+- [x] Audit logging: alle refund acties gelogd
+- [x] Email notification: bevestiging naar klant
+- [x] RLS: alleen org admins/owners kunnen refunden
+- [x] Ticket voiding: tickets worden ongeldig bij full refund
 
 ## Sprints
 
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| S1 | Database + Mollie Integration | 🟡 Active |
-| S2 | UI + Dashboard | 🔴 Planned |
+| S1 | Database + Mollie Integration | 🟢 Done |
+
+## Implemented Components
+
+### Database (20250128152000_f009_refunds_v2.sql)
+- `refund_status` enum: pending, queued, processing, refunded, failed, canceled
+- `refunds` table: full refund tracking with Mollie integration
+- `refund_items` table: partial refund item tracking
+- Indexes for performance
+- RLS policies: org admins/owners only
+
+### RPCs (20250128220000_f009_refund_rpcs.sql)
+- `get_order_refund_summary()`: Get refundable amount for an order
+- `void_tickets_for_refund()`: Void tickets when full refund completes
+- `handle_refund_webhook()`: Process Mollie status updates
+
+### Edge Functions
+- `create-refund`: Create refund via Mollie API
+- `mollie-webhook`: Extended to handle refund webhooks
+
+### Tests
+- 10/10 integration tests passing
 
 ## Technical Design
 
