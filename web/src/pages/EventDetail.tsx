@@ -13,7 +13,8 @@ import { useParams, useNavigate, Link, NavLink, Outlet } from 'react-router-dom'
 import {
     ArrowLeft, Loader2, Trash2, CheckCircle, XCircle,
     LayoutDashboard, Ticket, ShoppingCart, Users, Route, Package,
-    MessageSquare, Mail, HelpCircle, Settings, ChevronDown, CalendarDays, UserPlus
+    MessageSquare, Mail, HelpCircle, Settings, ChevronDown, CalendarDays, UserPlus,
+    CreditCard, Building2
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useOrgSafe } from '../hooks/useOrg'
@@ -139,8 +140,8 @@ export function EventDetail() {
     }
 
 
-    // Sidebar navigatie items
-    const navItems = [
+    // Event-level navigation items
+    const eventNavItems = [
         { name: 'Overzicht', href: '', icon: LayoutDashboard },
         { name: 'Tickets', href: 'tickets', icon: Ticket },
         { name: 'Bestellingen', href: 'orders', icon: ShoppingCart },
@@ -152,6 +153,13 @@ export function EventDetail() {
         { name: 'Berichten', href: 'messaging', icon: Mail },
         { name: 'FAQ', href: 'faq', icon: HelpCircle },
         { name: 'Instellingen', href: 'settings', icon: Settings },
+    ]
+
+    // Org-level navigation items (Administratie)
+    const orgNavItems = [
+        { name: 'Team', href: `/org/${org.slug}/team`, icon: Users },
+        { name: 'Finance', href: `/org/${org.slug}/finance`, icon: CreditCard },
+        { name: 'Organisatie', href: `/org/${org.slug}/settings`, icon: Building2 },
     ]
 
     return (
@@ -237,7 +245,8 @@ export function EventDetail() {
 
                 {/* Navigation */}
                 <nav className="flex-1 py-4 overflow-y-auto">
-                    {navItems.map((item) => {
+                    {/* Event Navigation */}
+                    {eventNavItems.map((item) => {
                         const fullPath = item.href
                             ? `/org/${org.slug}/events/${eventSlug}/${item.href}`
                             : `/org/${org.slug}/events/${eventSlug}`
@@ -259,6 +268,26 @@ export function EventDetail() {
                             </NavLink>
                         )
                     })}
+
+                    {/* Separator */}
+                    <div className="my-4 mx-4 border-t border-gray-200" />
+
+                    {/* Administratie Section */}
+                    <div className="px-4 mb-2">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Administratie
+                        </span>
+                    </div>
+                    {orgNavItems.map((item) => (
+                        <Link
+                            key={item.name}
+                            to={item.href}
+                            className="flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                        >
+                            <item.icon className="mr-3 h-5 w-5" />
+                            {item.name}
+                        </Link>
+                    ))}
                 </nav>
 
                 {/* Actions at bottom */}
