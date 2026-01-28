@@ -44,6 +44,7 @@ import { ScanPage } from './pages/ScanPage'
 import CheckIn from './pages/events/CheckIn'
 import Transfers from './pages/events/Transfers'
 import { EventRouteAdmin } from './pages/events/EventRouteAdmin'
+import { EventRouteTab } from './pages/events/EventRouteTab'
 import { EventRoute } from './pages/public/EventRoute'
 
 function App() {
@@ -96,6 +97,7 @@ function App() {
                 <Route path="tickets" element={<EventTickets />} />
                 <Route path="orders" element={<EventOrders />} />
                 <Route path="participants" element={<EventParticipants />} />
+                <Route path="route" element={<EventRouteTab />} />
                 <Route path="products" element={<EventProducts />} />
                 <Route path="communication" element={<EventCommunication />} />
                 <Route path="messaging" element={<EventMessaging />} />

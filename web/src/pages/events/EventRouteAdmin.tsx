@@ -4,7 +4,9 @@
  * Organizer page for managing event routes.
  * Features: GPX upload (drag & drop), preview, publish/unpublish, delete.
  *
- * Route: /events/:eventId/route
+ * Used in two ways:
+ * 1. Standalone page: /events/:eventId/route (EventRouteAdmin)
+ * 2. Embedded in tabs: EventRouteAdminContent with props
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -46,12 +48,23 @@ interface EventRoute {
   updated_at: string;
 }
 
-export function EventRouteAdmin() {
-  const { eventId } = useParams<{ eventId: string }>();
+interface EventRouteAdminContentProps {
+  eventId: string;
+  eventName?: string;
+  showHeader?: boolean;
+}
 
+/**
+ * Reusable content component for route management.
+ * Can be used standalone or embedded in tabs.
+ */
+export function EventRouteAdminContent({
+  eventId,
+  eventName,
+  showHeader = false,
+}: EventRouteAdminContentProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [event, setEvent] = useState<any>(null);
   const [route, setRoute] = useState<EventRoute | null>(null);
 
   // Upload state
@@ -64,26 +77,15 @@ export function EventRouteAdmin() {
   // Action state
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Fetch event and route
+  // Fetch route data
   useEffect(() => {
-    async function fetchData() {
+    async function fetchRoute() {
       if (!eventId) return;
 
       setLoading(true);
       setError(null);
 
       try {
-        // Get event
-        const { data: eventData, error: eventError } = await supabase
-          .from('events')
-          .select('id, name, slug, org_id, status')
-          .eq('id', eventId)
-          .single();
-
-        if (eventError) throw eventError;
-        setEvent(eventData);
-
-        // Get route
         const { data: routeData } = await supabase.rpc('get_event_route', {
           _event_id: eventId,
         });
@@ -92,14 +94,14 @@ export function EventRouteAdmin() {
           setRoute(routeData.route);
         }
       } catch (err: any) {
-        console.error('Error fetching data:', err);
-        setError(err.message || 'Kon gegevens niet ophalen');
+        console.error('Error fetching route:', err);
+        setError(err.message || 'Kon route niet ophalen');
       }
 
       setLoading(false);
     }
 
-    fetchData();
+    fetchRoute();
   }, [eventId]);
 
   // Handle file drop
@@ -232,15 +234,15 @@ export function EventRouteAdmin() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
       </div>
     );
   }
 
-  if (error && !event) {
+  if (error && !route) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
           <p className="mt-2 text-gray-600">{error}</p>
@@ -250,44 +252,29 @@ export function EventRouteAdmin() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link
-                to={`/events/${eventId}`}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">
-                  Route beheren
-                </h1>
-                <p className="text-sm text-gray-500">{event?.name}</p>
-              </div>
-            </div>
-
-            {route && (
-              <div className="flex items-center space-x-3">
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    route.status === 'published'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}
-                >
-                  {route.status === 'published' ? 'Gepubliceerd' : 'Concept'}
-                </span>
-              </div>
-            )}
+    <div className="space-y-6">
+      {/* Optional Header (for standalone mode) */}
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-gray-900">Route beheren</h2>
+            {eventName && <p className="text-sm text-gray-500">{eventName}</p>}
           </div>
+          {route && (
+            <span
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                route.status === 'published'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-yellow-100 text-yellow-800'
+              }`}
+            >
+              {route.status === 'published' ? 'Gepubliceerd' : 'Concept'}
+            </span>
+          )}
         </div>
-      </div>
+      )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
             <div className="flex">
@@ -500,6 +487,93 @@ export function EventRouteAdmin() {
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Standalone page wrapper for /events/:eventId/route
+ * Fetches event data and renders the content component.
+ */
+export function EventRouteAdmin() {
+  const { eventId } = useParams<{ eventId: string }>();
+  const [event, setEvent] = useState<{ id: string; name: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchEvent() {
+      if (!eventId) return;
+
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('events')
+          .select('id, name')
+          .eq('id', eventId)
+          .single();
+
+        if (fetchError) throw fetchError;
+        setEvent(data);
+      } catch (err: any) {
+        console.error('Error fetching event:', err);
+        setError(err.message || 'Kon event niet ophalen');
+      }
+
+      setLoading(false);
+    }
+
+    fetchEvent();
+  }, [eventId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
+  if (error || !event || !eventId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+          <p className="mt-2 text-gray-600">{error || 'Event niet gevonden'}</p>
+          <Link
+            to="/"
+            className="mt-4 inline-flex items-center text-indigo-600 hover:text-indigo-500"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            Terug
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center space-x-4">
+            <Link
+              to={`/events/${eventId}`}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">Route beheren</h1>
+              <p className="text-sm text-gray-500">{event.name}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <EventRouteAdminContent eventId={eventId} eventName={event.name} />
       </div>
     </div>
   );

@@ -11,7 +11,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link, NavLink, Outlet } from 'react-router-dom'
-import { ArrowLeft, Calendar, MapPin, Loader2, MoreVertical, Trash2, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Calendar, MapPin, Loader2, Trash2, CheckCircle, XCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useOrgSafe } from '../hooks/useOrg'
 import { getEventBySlug, setEventStatus, softDeleteEvent } from '../data/events'
@@ -130,8 +130,11 @@ export function EventDetail() {
         { name: 'Tickets', href: 'tickets' },
         { name: 'Bestellingen', href: 'orders' },
         { name: 'Deelnemers', href: 'participants' },
+        { name: 'Route', href: 'route' },
         { name: 'Producten', href: 'products' },
         { name: 'Communicatie', href: 'communication' },
+        { name: 'Berichten', href: 'messaging' },
+        { name: 'FAQ', href: 'faq' },
         { name: 'Instellingen', href: 'settings' },
     ]
 
