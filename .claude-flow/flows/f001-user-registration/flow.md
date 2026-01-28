@@ -1,95 +1,61 @@
-# Flow: User Registration
+# F001: User Registration
 
-**ID**: F001
-**Status**: 🔴 Planned
-**Total Sprints**: 2
-**Current Sprint**: -
+## Status: 🟡 Active - Sprint S1
 
-## Sprints
-| Sprint | Focus | Status |
-|--------|-------|--------|
-| S1 | DB Schema + RLS | 🔴 |
-| S2 | Edge Functions + Auth | 🔴 |
+## Summary
+
+Post-purchase user/participant registration flow. When an order is paid, automatically:
+1. Upsert participant (auth user or guest)
+2. Create/confirm registration for the event
+3. Link tickets to participant
+4. Queue confirmation email via outbox
 
 ## Dependencies
-- **Requires**: None (base flow)
-- **Blocks**: F002, F008
 
-## Overview
+- Requires: F006 (Checkout/Payment) - ✅ Done
+- Requires: F008 (Communication/Outbox) - ✅ Done
+- Enables: F002 (User Login), F007 (Ticket Delivery)
 
-Nieuwe gebruikers kunnen een account aanmaken om deel te nemen aan evenementen of zelf evenementen te organiseren.
+## Deliverables
 
-```
-Als nieuwe gebruiker
-Wil ik een account kunnen aanmaken
-Zodat ik me kan inschrijven voor evenementen en mijn tickets kan beheren
-```
+| Artifact | Status | Location |
+|----------|--------|----------|
+| Sprint Plan | 🟡 In Progress | `sprints/s1-plan.md` |
+| Architecture | 🔴 Pending | `sprints/s1-architecture.md` |
+| SQL Migration | 🔴 Pending | `supabase/migrations/` |
+| Integration Tests | 🔴 Pending | `tests/integration-tests.mjs` |
+| Review | 🔴 Pending | `sprints/s1-review.md` |
 
-## Flow Diagram
+## Database Changes
 
-```
-[Landing] → [Register] → [Form] → [Submit]
-                                     │
-                    ┌────────────────┴────────────────┐
-                    ▼                                 ▼
-            [Email Verify]                      [Error]
-                    │
-                    ▼
-            [Verify Link]
-                    │
-                    ▼
-            [Account Active] → [Dashboard]
-```
+### Existing Tables (Layer 3)
+- `participants` - Already exists, needs enhancements
+- `registrations` - Already exists, needs order_id link
+- `registration_answers` - Already exists
 
-## Supabase
+### New/Modified Columns
+- `registrations.order_id` - Link registration to order
+- `ticket_instances.participant_id` - Link ticket to participant
 
-### Tables
-| Table | Purpose |
-|-------|---------|
-| `auth.users` | Core auth |
-| `participants` | Extended profile |
+### New RPC Functions
+- `sync_registration_on_payment(order_id)` - Idempotent post-purchase sync
 
-### RLS Policies
-| Policy | Table | Rule |
-|--------|-------|------|
-| `select_own` | `participants` | `user_id = auth.uid()` |
-| `update_own` | `participants` | `user_id = auth.uid()` |
+### New Views
+- `organiser_registrations_view` - Aggregated view for organizer dashboard
 
-### Triggers
-| Trigger | Table | Purpose |
-|---------|-------|---------|
-| `on_auth_user_created` | `auth.users` | Create `participants` record |
+## Edge Functions
 
-### Edge Functions
-- None required (uses Supabase Auth)
-
-## API Endpoints
-
-| Method | Endpoint | Auth |
-|--------|----------|------|
-| POST | `/auth/v1/signup` | No |
-| POST | `/auth/v1/verify` | No |
-| GET | `/rest/v1/participants?id=eq.{id}` | Yes |
-
-## Test Scenarios
-
-| ID | Scenario | Expected |
-|----|----------|----------|
-| T1 | Happy path | Account created, verified |
-| T2 | Duplicate email | Error: email exists |
-| T3 | Weak password | Error: weak password |
-| T4 | Invalid email | Validation error |
-| T5 | Empty fields | Validation errors |
+None new - uses existing checkout webhook flow.
 
 ## Acceptance Criteria
 
-- [ ] User can register with email/password
-- [ ] Password strength validation
-- [ ] Verification email sent
-- [ ] `participants` record auto-created
-- [ ] RLS prevents cross-user access
-- [ ] All test scenarios pass
+1. When order.status -> 'paid', participant is upserted (email + name from order)
+2. Registration is created/confirmed for the event with status 'confirmed'
+3. All ticket_instances for the order get linked to the participant
+4. Outbox event 'REGISTRATION_CONFIRMATION' is created
+5. Organizer can view registrations per event with filters
+6. Idempotent: duplicate webhook calls don't create duplicates
 
 ---
 
-*Last updated: 2025-01-27*
+*Created: 2026-01-28*
