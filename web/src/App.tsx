@@ -46,6 +46,8 @@ import Transfers from './pages/events/Transfers'
 import { EventRouteAdmin } from './pages/events/EventRouteAdmin'
 import { EventRouteTab } from './pages/events/EventRouteTab'
 import { EventRoute } from './pages/public/EventRoute'
+import { EventInvitations } from './pages/EventInvitations'
+import { PublicInvite } from './pages/public/PublicInvite'
 
 function App() {
   return (
@@ -63,6 +65,9 @@ function App() {
           <Route path="/e/:eventSlug/chat" element={<ParticipantChat />} />
           <Route path="/e/:eventSlug/faq" element={<PublicFaq />} />
           <Route path="/e/:eventSlug/route" element={<EventRoute />} />
+
+          {/* Public Invite */}
+          <Route path="/invite/:code" element={<PublicInvite />} />
 
           {/* Public Event Discovery */}
           <Route path="/events" element={<PublicEvents />} />
@@ -102,6 +107,7 @@ function App() {
                 <Route path="communication" element={<EventCommunication />} />
                 <Route path="messaging" element={<EventMessaging />} />
                 <Route path="faq" element={<EventFaqAdmin />} />
+                <Route path="invitations" element={<EventInvitations />} />
                 <Route path="settings" element={<EventSettings />} />
               </Route>
 

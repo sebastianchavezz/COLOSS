@@ -1,20 +1,23 @@
 /**
  * EventDetail Page
- * 
- * Detail pagina voor een specifiek event.
+ *
+ * Detail pagina voor een specifiek event met sidebar navigatie.
  * Features:
- * - Header met naam, datum, status, acties
- * - Status toggle (draft <-> published)
- * - Delete knop (soft delete met confirm)
- * - Tabs voor sub-secties (Coming soon placeholders)
+ * - Sidebar met alle event categorieën
+ * - Full-width content area per categorie
+ * - Compacte header met event info
  */
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link, NavLink, Outlet } from 'react-router-dom'
-import { ArrowLeft, Calendar, MapPin, Loader2, Trash2, CheckCircle, XCircle } from 'lucide-react'
+import {
+    ArrowLeft, Loader2, Trash2, CheckCircle, XCircle,
+    LayoutDashboard, Ticket, ShoppingCart, Users, Route, Package,
+    MessageSquare, Mail, HelpCircle, Settings, ChevronDown, CalendarDays, UserPlus
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import { useOrgSafe } from '../hooks/useOrg'
-import { getEventBySlug, setEventStatus, softDeleteEvent } from '../data/events'
+import { getEventBySlug, setEventStatus, softDeleteEvent, listEvents } from '../data/events'
 import type { AppEvent } from '../types/supabase'
 
 export function EventDetail() {
@@ -24,10 +27,12 @@ export function EventDetail() {
     const navigate = useNavigate()
 
     const [event, setEvent] = useState<AppEvent | null>(null)
+    const [allEvents, setAllEvents] = useState<AppEvent[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [actionLoading, setActionLoading] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [showEventSwitcher, setShowEventSwitcher] = useState(false)
 
     // Fetch event data
     const fetchEvent = useCallback(async () => {
@@ -53,6 +58,16 @@ export function EventDetail() {
     useEffect(() => {
         fetchEvent()
     }, [fetchEvent])
+
+    // Fetch all events for event switcher
+    useEffect(() => {
+        async function fetchAllEvents() {
+            if (!org) return
+            const { data } = await listEvents(org.id)
+            if (data) setAllEvents(data)
+        }
+        fetchAllEvents()
+    }, [org?.id])
 
     // Toggle status
     const handleToggleStatus = async () => {
@@ -124,133 +139,172 @@ export function EventDetail() {
     }
 
 
-    // Tab configuratie
-    const tabs = [
-        { name: 'Overzicht', href: '' },
-        { name: 'Tickets', href: 'tickets' },
-        { name: 'Bestellingen', href: 'orders' },
-        { name: 'Deelnemers', href: 'participants' },
-        { name: 'Route', href: 'route' },
-        { name: 'Producten', href: 'products' },
-        { name: 'Communicatie', href: 'communication' },
-        { name: 'Berichten', href: 'messaging' },
-        { name: 'FAQ', href: 'faq' },
-        { name: 'Instellingen', href: 'settings' },
+    // Sidebar navigatie items
+    const navItems = [
+        { name: 'Overzicht', href: '', icon: LayoutDashboard },
+        { name: 'Tickets', href: 'tickets', icon: Ticket },
+        { name: 'Bestellingen', href: 'orders', icon: ShoppingCart },
+        { name: 'Deelnemers', href: 'participants', icon: Users },
+        { name: 'Uitnodigingen', href: 'invitations', icon: UserPlus },
+        { name: 'Route', href: 'route', icon: Route },
+        { name: 'Producten', href: 'products', icon: Package },
+        { name: 'Communicatie', href: 'communication', icon: MessageSquare },
+        { name: 'Berichten', href: 'messaging', icon: Mail },
+        { name: 'FAQ', href: 'faq', icon: HelpCircle },
+        { name: 'Instellingen', href: 'settings', icon: Settings },
     ]
 
-
     return (
-        <div className="space-y-6">
-            {/* Back link */}
-            <Link
-                to={`/org/${org.slug}/events`}
-                className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
-            >
-                <ArrowLeft className="mr-1 h-4 w-4" />
-                Alle evenementen
-            </Link>
+        <div className="flex h-screen">
+            {/* Sidebar */}
+            <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+                {/* COLOSS Header */}
+                <div className="h-16 flex items-center px-4 border-b border-gray-200">
+                    <Link to={`/org/${org.slug}/events`}>
+                        <img src="/coloss-logo.png" alt="COLOSS" className="h-8 w-auto" />
+                    </Link>
+                </div>
 
-            {/* Event Header */}
-            <div className="bg-white shadow sm:rounded-lg">
-                <div className="px-4 py-5 sm:px-6">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>
-                            <div className="mt-2 flex items-center text-sm text-gray-500 space-x-4">
-                                <span className="flex items-center">
-                                    <Calendar className="mr-1 h-4 w-4" />
+                {/* Event Switcher */}
+                <div className="p-3 border-b border-gray-200 relative">
+                    <button
+                        onClick={() => setShowEventSwitcher(!showEventSwitcher)}
+                        className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        <div className="flex items-center min-w-0">
+                            <div className="flex-shrink-0 w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                                <CalendarDays className="h-4 w-4 text-indigo-600" />
+                            </div>
+                            <div className="ml-3 text-left min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{event.name}</p>
+                                <p className="text-xs text-gray-500">
                                     {new Date(event.start_time).toLocaleDateString('nl-NL', {
                                         day: 'numeric',
-                                        month: 'long',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
+                                        month: 'short'
                                     })}
-                                </span>
-                                {event.location_name && (
-                                    <span className="flex items-center">
-                                        <MapPin className="mr-1 h-4 w-4" />
-                                        {event.location_name}
-                                    </span>
-                                )}
+                                </p>
                             </div>
                         </div>
+                        <ChevronDown className={clsx(
+                            'h-4 w-4 text-gray-400 transition-transform flex-shrink-0',
+                            showEventSwitcher && 'rotate-180'
+                        )} />
+                    </button>
 
-                        {/* Status + Actions */}
-                        <div className="flex items-center space-x-3">
-                            <StatusBadge status={event.status} />
-
-                            {/* Toggle Status Button */}
-                            <button
-                                onClick={handleToggleStatus}
-                                disabled={actionLoading}
-                                className={clsx(
-                                    'inline-flex items-center px-3 py-2 border text-sm font-medium rounded-md',
-                                    event.status === 'published'
-                                        ? 'border-yellow-300 text-yellow-700 bg-yellow-50 hover:bg-yellow-100'
-                                        : 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100',
-                                    'disabled:opacity-50'
-                                )}
+                    {/* Event Dropdown */}
+                    {showEventSwitcher && (
+                        <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                            <Link
+                                to={`/org/${org.slug}/events`}
+                                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 border-b border-gray-100"
+                                onClick={() => setShowEventSwitcher(false)}
                             >
-                                {actionLoading ? (
-                                    <Loader2 className="animate-spin h-4 w-4" />
-                                ) : event.status === 'published' ? (
-                                    <>
-                                        <XCircle className="mr-1 h-4 w-4" />
-                                        Zet naar concept
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle className="mr-1 h-4 w-4" />
-                                        Publiceer
-                                    </>
-                                )}
-                            </button>
-
-                            {/* Delete Button */}
-                            <button
-                                onClick={() => setShowDeleteConfirm(true)}
-                                disabled={actionLoading}
-                                className="inline-flex items-center px-3 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Tabs */}
-                <div className="border-t border-gray-200">
-                    <nav className="-mb-px flex space-x-8 px-6" aria-label="Tabs">
-                        {tabs.map((tab) => {
-                            const fullPath = tab.href
-                                ? `/org/${org.slug}/events/${eventSlug}/${tab.href}`
-                                : `/org/${org.slug}/events/${eventSlug}`
-
-                            return (
-                                <NavLink
-                                    key={tab.name}
-                                    to={fullPath}
-                                    end={!tab.href}
-                                    className={({ isActive }) => clsx(
-                                        'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
-                                        isActive
-                                            ? 'border-indigo-500 text-indigo-600'
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Alle evenementen
+                            </Link>
+                            {allEvents.map((e) => (
+                                <button
+                                    key={e.id}
+                                    onClick={() => {
+                                        navigate(`/org/${org.slug}/events/${e.slug}`)
+                                        setShowEventSwitcher(false)
+                                    }}
+                                    className={clsx(
+                                        'w-full flex items-center px-3 py-2 text-sm text-left hover:bg-gray-50',
+                                        e.id === event.id && 'bg-indigo-50'
                                     )}
                                 >
-                                    {tab.name}
-                                </NavLink>
-                            )
-                        })}
-                    </nav>
+                                    <div className="min-w-0 flex-1">
+                                        <p className={clsx(
+                                            'truncate',
+                                            e.id === event.id ? 'font-medium text-indigo-700' : 'text-gray-700'
+                                        )}>
+                                            {e.name}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            {new Date(e.start_time).toLocaleDateString('nl-NL', {
+                                                day: 'numeric',
+                                                month: 'short'
+                                            })}
+                                        </p>
+                                    </div>
+                                    <StatusBadge status={e.status} />
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
-            </div>
 
-            {/* Tab Content */}
-            <div className="bg-white shadow sm:rounded-lg p-6">
-                <Outlet context={{ event, org, refreshEvent: fetchEvent }} />
-            </div>
+                {/* Navigation */}
+                <nav className="flex-1 py-4 overflow-y-auto">
+                    {navItems.map((item) => {
+                        const fullPath = item.href
+                            ? `/org/${org.slug}/events/${eventSlug}/${item.href}`
+                            : `/org/${org.slug}/events/${eventSlug}`
+
+                        return (
+                            <NavLink
+                                key={item.name}
+                                to={fullPath}
+                                end={!item.href}
+                                className={({ isActive }) => clsx(
+                                    'flex items-center px-4 py-2.5 text-sm font-medium transition-colors',
+                                    isActive
+                                        ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-600'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                )}
+                            >
+                                <item.icon className="mr-3 h-5 w-5" />
+                                {item.name}
+                            </NavLink>
+                        )
+                    })}
+                </nav>
+
+                {/* Actions at bottom */}
+                <div className="p-4 border-t border-gray-200 space-y-2">
+                    <button
+                        onClick={handleToggleStatus}
+                        disabled={actionLoading}
+                        className={clsx(
+                            'w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                            event.status === 'published'
+                                ? 'border border-yellow-300 text-yellow-700 bg-yellow-50 hover:bg-yellow-100'
+                                : 'border border-green-300 text-green-700 bg-green-50 hover:bg-green-100',
+                            'disabled:opacity-50'
+                        )}
+                    >
+                        {actionLoading ? (
+                            <Loader2 className="animate-spin h-4 w-4" />
+                        ) : event.status === 'published' ? (
+                            <>
+                                <XCircle className="mr-1.5 h-4 w-4" />
+                                Concept
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle className="mr-1.5 h-4 w-4" />
+                                Publiceer
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        disabled={actionLoading}
+                        className="w-full flex items-center justify-center px-3 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+                    >
+                        <Trash2 className="mr-1.5 h-4 w-4" />
+                        Verwijderen
+                    </button>
+                </div>
+            </aside>
+
+            {/* Main Content Area */}
+            <main className="flex-1 overflow-y-auto bg-gray-50">
+                <div className="p-6">
+                    <Outlet context={{ event, org, refreshEvent: fetchEvent }} />
+                </div>
+            </main>
 
             {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (

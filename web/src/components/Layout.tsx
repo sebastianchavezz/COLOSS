@@ -387,6 +387,21 @@ export function Layout({ children }: { children?: React.ReactNode }) {
         return <div className="p-8 text-red-600">Inconsistent state: ready but no org</div>
     }
 
+    // Check if we're on an event detail page (has eventSlug in path)
+    // Pattern: /org/:orgSlug/events/:eventSlug/...
+    const eventDetailMatch = location.pathname.match(/^\/org\/[^/]+\/events\/([^/]+)/)
+    const isEventDetailPage = eventDetailMatch && eventDetailMatch[1] !== 'new'
+
+    // If on event detail page, render without main sidebar (EventDetail has its own)
+    if (isEventDetailPage) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                {children}
+                <Outlet context={{ org }} />
+            </div>
+        )
+    }
+
     const navItems = [
         { name: 'Dashboard', href: `/org/${orgSlug}`, icon: LayoutDashboard },
         { name: 'Events', href: `/org/${orgSlug}/events`, icon: Calendar },
