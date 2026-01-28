@@ -1,16 +1,14 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { authHelpers } from '../lib/auth-helpers'
 import { Loader2 } from 'lucide-react'
 
 export default function AuthCallback() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
 
     useEffect(() => {
-        // The AuthContext and supabase client handle the session restoration.
-        // We just need to wait a brief moment or check session status and redirect.
-
         const handleAuth = async () => {
             const { data: { session }, error } = await supabase.auth.getSession()
 
@@ -20,19 +18,36 @@ export default function AuthCallback() {
                 return
             }
 
+            // Check if this is a password recovery callback
+            const type = searchParams.get('type')
+            if (type === 'recovery') {
+                navigate('/reset-password?type=recovery', { replace: true })
+                return
+            }
+
             const next = authHelpers.consumeReturnTo()
 
             if (session) {
+                // Auto-link participant to user on successful auth
+                try {
+                    await supabase.rpc('link_current_user_to_participant')
+                } catch (e) {
+                    // Non-critical, ignore errors
+                    console.log('Participant link attempt:', e)
+                }
+
                 navigate(next, { replace: true })
             } else {
                 // If no session yet, wait for the onAuthStateChange in AuthContext to fire
-                // or just redirect to login if it takes too long.
-                // But usually getSession() is sufficient if the client handled the URL.
-
-                // For PKCE, the exchange happens automatically.
-                // We can listen for the SIGNED_IN event.
-                const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
                     if (event === 'SIGNED_IN' && session) {
+                        // Auto-link participant
+                        try {
+                            await supabase.rpc('link_current_user_to_participant')
+                        } catch (e) {
+                            console.log('Participant link attempt:', e)
+                        }
+
                         navigate(next, { replace: true })
                     }
                 })
@@ -42,7 +57,7 @@ export default function AuthCallback() {
         }
 
         handleAuth()
-    }, [navigate])
+    }, [navigate, searchParams])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">

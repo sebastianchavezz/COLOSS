@@ -23,12 +23,18 @@ import {
 } from './pages/EventDetail'
 import { EventSettings } from './pages/EventSettings'
 import { EventCommunication } from './pages/EventCommunication'
+import { EventMessaging } from './pages/EventMessaging'
+import { EventFaqAdmin } from './pages/EventFaqAdmin'
 import { EventTickets } from './pages/EventTickets'
 import { EventOrders } from './pages/EventOrders'
 import { EventParticipants } from './pages/EventParticipants'
 import { PublicEventCheckout } from './pages/public/PublicEventCheckout'
 import { PublicConfirm } from './pages/public/PublicConfirm'
+import { ParticipantChat } from './pages/ParticipantChat'
+import { PublicFaq } from './pages/PublicFaq'
 import Login from './pages/Login'
+import Signup from './pages/Signup'
+import ResetPassword from './pages/ResetPassword'
 import AuthCallback from './pages/AuthCallback'
 import AuthDebug from './components/AuthDebug'
 
@@ -44,9 +50,13 @@ function App() {
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/e/:eventSlug" element={<PublicEventCheckout />} />
           <Route path="/e/:eventSlug/confirm" element={<PublicConfirm />} />
+          <Route path="/e/:eventSlug/chat" element={<ParticipantChat />} />
+          <Route path="/e/:eventSlug/faq" element={<PublicFaq />} />
 
           {/* Protected Routes Wrapper */}
           <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
@@ -78,6 +88,8 @@ function App() {
                 <Route path="participants" element={<EventParticipants />} />
                 <Route path="products" element={<EventProducts />} />
                 <Route path="communication" element={<EventCommunication />} />
+                <Route path="messaging" element={<EventMessaging />} />
+                <Route path="faq" element={<EventFaqAdmin />} />
                 <Route path="settings" element={<EventSettings />} />
               </Route>
 

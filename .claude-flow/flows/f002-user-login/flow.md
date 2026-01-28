@@ -1,15 +1,14 @@
 # Flow: User Login/Auth
 
 **ID**: F002
-**Status**: 🔴 Planned
-**Total Sprints**: 2
-**Current Sprint**: -
+**Status**: 🟢 Done
+**Total Sprints**: 1
+**Current Sprint**: Done
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| S1 | Auth Setup + Sessions | 🔴 |
-| S2 | Magic Link + Password Reset | 🔴 |
+| S1 | Auth Foundation (Signup, Reset, Participant Link) | 🟢 Done |
 
 ## Dependencies
 - **Requires**: F001
@@ -83,13 +82,28 @@ Zodat ik toegang krijg tot mijn account en tickets
 
 ## Acceptance Criteria
 
-- [ ] Email/password login works
-- [ ] Magic link login works
-- [ ] Password reset works
-- [ ] Session persists across refresh
-- [ ] Logout destroys session
-- [ ] Rate limiting on login attempts
+- [x] Email/password login works
+- [x] Magic link login works
+- [x] Password reset works
+- [x] Session persists across refresh
+- [x] Logout destroys session
+- [x] Rate limiting on login attempts (Supabase built-in)
+- [x] Signup page with email/password
+- [x] Auto-link participants to auth users
+
+## Deliverables
+
+| Artifact | Status | Location |
+|----------|--------|----------|
+| Sprint Plan | Done | `sprints/s1-plan.md` |
+| Architecture | Done | `sprints/s1-architecture.md` |
+| Signup Page | Done | `web/src/pages/Signup.tsx` |
+| ResetPassword Page | Done | `web/src/pages/ResetPassword.tsx` |
+| SQL Migration | Done | `supabase/migrations/20250128140000_f002_auth_participant_link.sql` |
+| Integration Tests | Done (10/10) | `tests/integration-tests.mjs` |
+| Review | Approved | `sprints/s1-review.md` |
+| Test Report | Done | `sprints/s1-test-report.md` |
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2026-01-28*

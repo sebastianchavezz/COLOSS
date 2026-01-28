@@ -1,27 +1,24 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Mail, Lock, Loader2, ArrowRight } from 'lucide-react'
-
+import { Link, useNavigate } from 'react-router-dom'
+import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react'
 import { authHelpers } from '../lib/auth-helpers'
 
-export default function Login() {
+export default function Signup() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
+    const [firstName, setFirstName] = useState('')
+    const [lastName, setLastName] = useState('')
     const [loading, setLoading] = useState(false)
     const [message, setMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null)
-    const [mode, setMode] = useState<'magic_link' | 'password'>('magic_link')
 
     const navigate = useNavigate()
-    const location = useLocation()
 
-    // Get return path from location state or default to dashboard
-    const from = location.state?.from?.pathname || '/'
-
-    const handleGoogleLogin = async () => {
+    const handleGoogleSignup = async () => {
         try {
             setLoading(true)
-            authHelpers.saveReturnTo(from)
+            authHelpers.saveReturnTo('/')
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
@@ -35,38 +32,48 @@ export default function Login() {
         }
     }
 
-    const handleMagicLinkLogin = async (e: React.FormEvent) => {
+    const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        if (password !== confirmPassword) {
+            setMessage({ type: 'error', text: 'Passwords do not match' })
+            return
+        }
+
+        if (password.length < 6) {
+            setMessage({ type: 'error', text: 'Password must be at least 6 characters' })
+            return
+        }
+
         try {
             setLoading(true)
-            authHelpers.saveReturnTo(from)
-            const { error } = await supabase.auth.signInWithOtp({
+            authHelpers.saveReturnTo('/')
+
+            const { data, error } = await supabase.auth.signUp({
                 email,
+                password,
                 options: {
                     emailRedirectTo: `${window.location.origin}/auth/callback`,
+                    data: {
+                        first_name: firstName,
+                        last_name: lastName,
+                    },
                 },
             })
+
             if (error) throw error
-            setMessage({ type: 'success', text: 'Check your email for the login link!' })
+
+            if (data.user?.identities?.length === 0) {
+                setMessage({ type: 'error', text: 'An account with this email already exists. Please sign in instead.' })
+            } else {
+                setMessage({
+                    type: 'success',
+                    text: 'Check your email to confirm your account!'
+                })
+            }
         } catch (error: any) {
             setMessage({ type: 'error', text: error.message })
         } finally {
-            setLoading(false)
-        }
-    }
-
-    const handlePasswordLogin = async (e: React.FormEvent) => {
-        e.preventDefault()
-        try {
-            setLoading(true)
-            const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            })
-            if (error) throw error
-            navigate(from, { replace: true })
-        } catch (error: any) {
-            setMessage({ type: 'error', text: error.message })
             setLoading(false)
         }
     }
@@ -75,12 +82,12 @@ export default function Login() {
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
                 <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-                    Organizer OS
+                    Create your account
                 </h2>
                 <p className="mt-2 text-center text-sm text-gray-600">
                     Or{' '}
-                    <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
-                        create a new account
+                    <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+                        sign in to existing account
                     </Link>
                 </p>
             </div>
@@ -88,10 +95,10 @@ export default function Login() {
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
 
-                    {/* Google Login */}
+                    {/* Google Signup */}
                     <div>
                         <button
-                            onClick={handleGoogleLogin}
+                            onClick={handleGoogleSignup}
                             disabled={loading}
                             className="w-full flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         >
@@ -122,12 +129,52 @@ export default function Login() {
                             <div className="w-full border-t border-gray-300" />
                         </div>
                         <div className="relative flex justify-center text-sm">
-                            <span className="px-2 bg-white text-gray-500">Or continue with email</span>
+                            <span className="px-2 bg-white text-gray-500">Or register with email</span>
                         </div>
                     </div>
 
                     <div className="mt-6">
-                        <form onSubmit={mode === 'magic_link' ? handleMagicLinkLogin : handlePasswordLogin} className="space-y-6">
+                        <form onSubmit={handleSignup} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                                        First name
+                                    </label>
+                                    <div className="mt-1 relative rounded-md shadow-sm">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <User className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                                        </div>
+                                        <input
+                                            id="firstName"
+                                            name="firstName"
+                                            type="text"
+                                            autoComplete="given-name"
+                                            required
+                                            value={firstName}
+                                            onChange={(e) => setFirstName(e.target.value)}
+                                            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md h-10 border px-3"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                                        Last name
+                                    </label>
+                                    <div className="mt-1">
+                                        <input
+                                            id="lastName"
+                                            name="lastName"
+                                            type="text"
+                                            autoComplete="family-name"
+                                            required
+                                            value={lastName}
+                                            onChange={(e) => setLastName(e.target.value)}
+                                            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md h-10 border px-3"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div>
                                 <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                                     Email address
@@ -150,28 +197,48 @@ export default function Login() {
                                 </div>
                             </div>
 
-                            {mode === 'password' && (
-                                <div>
-                                    <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                                        Password
-                                    </label>
-                                    <div className="mt-1 relative rounded-md shadow-sm">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <Lock className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                                        </div>
-                                        <input
-                                            id="password"
-                                            name="password"
-                                            type="password"
-                                            autoComplete="current-password"
-                                            required
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md h-10 border px-3"
-                                        />
+                            <div>
+                                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                                    Password
+                                </label>
+                                <div className="mt-1 relative rounded-md shadow-sm">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Lock className="h-5 w-5 text-gray-400" aria-hidden="true" />
                                     </div>
+                                    <input
+                                        id="password"
+                                        name="password"
+                                        type="password"
+                                        autoComplete="new-password"
+                                        required
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md h-10 border px-3"
+                                        placeholder="Min. 6 characters"
+                                    />
                                 </div>
-                            )}
+                            </div>
+
+                            <div>
+                                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                                    Confirm password
+                                </label>
+                                <div className="mt-1 relative rounded-md shadow-sm">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Lock className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                                    </div>
+                                    <input
+                                        id="confirmPassword"
+                                        name="confirmPassword"
+                                        type="password"
+                                        autoComplete="new-password"
+                                        required
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md h-10 border px-3"
+                                    />
+                                </div>
+                            </div>
 
                             {message && (
                                 <div className={`rounded-md p-4 ${message.type === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
@@ -195,36 +262,13 @@ export default function Login() {
                                         <Loader2 className="animate-spin h-5 w-5" />
                                     ) : (
                                         <>
-                                            {mode === 'magic_link' ? 'Send Magic Link' : 'Sign In'}
+                                            Create Account
                                             <ArrowRight className="ml-2 h-5 w-5" />
                                         </>
                                     )}
                                 </button>
                             </div>
                         </form>
-
-                        <div className="mt-4 text-center space-y-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setMode(mode === 'magic_link' ? 'password' : 'magic_link')
-                                    setMessage(null)
-                                }}
-                                className="text-sm text-indigo-600 hover:text-indigo-500"
-                            >
-                                {mode === 'magic_link' ? 'Use password instead' : 'Use magic link instead'}
-                            </button>
-                            {mode === 'password' && (
-                                <div>
-                                    <Link
-                                        to="/reset-password"
-                                        className="text-sm text-gray-500 hover:text-gray-700"
-                                    >
-                                        Forgot your password?
-                                    </Link>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
             </div>

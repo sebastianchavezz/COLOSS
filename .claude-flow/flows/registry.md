@@ -7,8 +7,8 @@
 
 | ID | Flow | Status | Sprints | Current | Tests |
 |----|------|--------|---------|---------|-------|
-| F001 | User Registration | 🔴 | 0/2 | - | ⬜ |
-| F002 | User Login/Auth | 🔴 | 0/2 | - | ⬜ |
+| F001 | User Registration | 🟢 | 1/1 | Done | ✅ |
+| F002 | User Login/Auth | 🟢 | 1/1 | Done | ✅ |
 | F003 | Event Creation | 🔴 | 0/3 | - | ⬜ |
 | F004 | Event Discovery | 🔴 | 0/2 | - | ⬜ |
 | F005 | Ticket Selection | 🟡 | 1/2 | S1 Complete | ✅ |
@@ -18,6 +18,7 @@
 | F009 | Refund Flow | 🔴 | 0/2 | - | ⬜ |
 | F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
 | F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
+| F012 | Event Communication (Messaging + FAQ) | 🟢 | 1/1 | Done | ✅ |
 
 ## Status Legend
 
@@ -32,10 +33,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Flows | 11 |
-| 🔴 Planned | 6 |
+| Total Flows | 12 |
+| 🔴 Planned | 4 |
 | 🟡 Active | 2 |
-| 🟢 Done | 3 |
+| 🟢 Done | 6 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
@@ -62,15 +63,19 @@ F001 (User Registration)
   │      │      └──► F010 (Organizer Dashboard)
   │      │
   │      └──► F008 (Communication) ✅
+  │              │
+  │              └──► F012 (Event Communication: Messaging + FAQ) ✅
   │
   └──► F008 (Communication) ✅
+         │
+         └──► F012 (Event Communication: Messaging + FAQ) ✅
 ```
 
 ## Sprint Planning
 
 | Sprint | Focus | Flows | Status |
 |--------|-------|-------|--------|
-| 1 | Authentication | F001, F002 | 🔴 Planned |
+| 1 | Authentication | F001, F002 | 🟡 Partial (F001 done) |
 | 2 | Events | F003, F010 | 🔴 Planned |
 | 3 | Discovery | F004, F005 | 🟡 Partial (F005 S1 done) |
 | 4 | Checkout | F006, F007 | 🟡 Partial (F007 S1 done) |
@@ -82,9 +87,13 @@ F001 (User Registration)
 .claude-flow/flows/
 ├── registry.md                    # This file
 ├── f001-user-registration/
-│   ├── flow.md
+│   ├── flow.md                    # 🟢 Done
 │   ├── sprints/
+│   │   ├── s1-plan.md
+│   │   ├── s1-architecture.md
+│   │   └── s1-review.md
 │   └── tests/
+│       └── integration-tests.mjs  # 12/12 passing
 ├── f002-user-login/
 │   └── ...
 ├── f006-checkout-payment/
@@ -111,9 +120,26 @@ F001 (User Registration)
 │   │   ├── s1-review.md
 │   │   └── s1-test-report.md
 │   └── tests/
+├── f012-event-communication/
+│   ├── flow.md                    # 🟢 Done
+│   ├── sprints/
+│   │   ├── s1-plan.md             # Backend: DB + RLS + Edge Functions
+│   │   ├── s1-database-design.md  # Detailed column specs
+│   │   ├── s1-architecture.md     # Architecture + ADRs
+│   │   ├── s1-edge-function-interfaces.md  # TypeScript interfaces
+│   │   └── s2-plan.md             # UI: Chat + Thread List + FAQ
+│   ├── tests/
+│   │   ├── test-plan.md           # 70 test scenarios
+│   │   ├── test-requirements.md   # Test requirements
+│   │   ├── full-test-suite.sql    # Complete 32-test SQL suite
+│   │   ├── verification-final.sql # Integration verification
+│   │   └── README.md              # Test results summary
+│   └── bugs/
+│       ├── index.md               # Bug tracker
+│       └── b001_b005_f012_fixes.md # Fixes applied
 └── ...
 ```
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2026-01-28*
