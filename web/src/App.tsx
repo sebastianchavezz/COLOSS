@@ -43,6 +43,8 @@ import AuthDebug from './components/AuthDebug'
 import { ScanPage } from './pages/ScanPage'
 import CheckIn from './pages/events/CheckIn'
 import Transfers from './pages/events/Transfers'
+import { EventRouteAdmin } from './pages/events/EventRouteAdmin'
+import { EventRoute } from './pages/public/EventRoute'
 
 function App() {
   return (
@@ -59,6 +61,7 @@ function App() {
           <Route path="/e/:eventSlug/confirm" element={<PublicConfirm />} />
           <Route path="/e/:eventSlug/chat" element={<ParticipantChat />} />
           <Route path="/e/:eventSlug/faq" element={<PublicFaq />} />
+          <Route path="/e/:eventSlug/route" element={<EventRoute />} />
 
           {/* Public Event Discovery */}
           <Route path="/events" element={<PublicEvents />} />
@@ -73,6 +76,7 @@ function App() {
             {/* Operations Routes (Direct Access) */}
             <Route path="/events/:eventId/check-in" element={<CheckIn />} />
             <Route path="/events/:eventId/transfers" element={<Transfers />} />
+            <Route path="/events/:eventId/route" element={<EventRouteAdmin />} />
 
             {/* Redirect root naar default org */}
             <Route path="/" element={<Navigate to="/org/demo/events" replace />} />
