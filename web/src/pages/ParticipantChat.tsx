@@ -147,8 +147,26 @@ export function ParticipantChat() {
 
         try {
             // Refresh session to get fresh token (prevents "Invalid JWT" errors)
-            const { data: refreshedSession } = await supabase.auth.refreshSession()
+            console.log('[ParticipantChat] Refreshing session...')
+            const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession()
+
+            if (refreshError) {
+                console.error('[ParticipantChat] Refresh error:', refreshError)
+            }
+
+            console.log('[ParticipantChat] Refreshed session:', refreshedSession?.session ? 'yes' : 'no')
+
             const token = refreshedSession?.session?.access_token || session?.access_token
+
+            // Debug: show token header (algorithm info)
+            if (token) {
+                try {
+                    const header = JSON.parse(atob(token.split('.')[0]))
+                    console.log('[ParticipantChat] Token header:', header)
+                } catch (e) {
+                    console.log('[ParticipantChat] Could not parse token header')
+                }
+            }
 
             console.log('[ParticipantChat] Token obtained:', token ? 'yes (length: ' + token.length + ')' : 'no')
 

@@ -30,12 +30,31 @@ export interface AuthResult {
  */
 export async function authenticateUser(req: Request): Promise<AuthResult> {
   const authHeader = req.headers.get('Authorization')
+
+  // Debug: log auth header presence
+  console.log('[auth] Auth header present:', !!authHeader)
+
   if (!authHeader) {
     return { user: null, error: 'NO_AUTH_HEADER', client: null }
   }
 
+  // Debug: log token info (first 50 chars)
+  const token = authHeader.replace('Bearer ', '')
+  console.log('[auth] Token preview:', token.substring(0, 50) + '...')
+
+  // Debug: try to decode token header
+  try {
+    const header = JSON.parse(atob(token.split('.')[0]))
+    console.log('[auth] Token header:', JSON.stringify(header))
+  } catch (e) {
+    console.log('[auth] Could not decode token header:', e)
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
+
+  console.log('[auth] Supabase URL:', supabaseUrl ? 'set' : 'NOT SET')
+  console.log('[auth] Supabase Anon Key:', supabaseAnonKey ? 'set' : 'NOT SET')
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return { user: null, error: 'SERVER_CONFIG_ERROR', client: null }
@@ -45,12 +64,20 @@ export async function authenticateUser(req: Request): Promise<AuthResult> {
     global: { headers: { Authorization: authHeader } }
   })
 
+  console.log('[auth] Calling getUser()...')
   const { data: { user }, error: authError } = await client.auth.getUser()
 
-  if (authError || !user) {
-    return { user: null, error: 'INVALID_TOKEN', client }
+  if (authError) {
+    console.log('[auth] getUser() error:', authError.message, authError.status)
+    return { user: null, error: `INVALID_TOKEN: ${authError.message}`, client }
   }
 
+  if (!user) {
+    console.log('[auth] getUser() returned no user')
+    return { user: null, error: 'NO_USER_RETURNED', client }
+  }
+
+  console.log('[auth] User authenticated:', user.id)
   return { user, error: null, client }
 }
 

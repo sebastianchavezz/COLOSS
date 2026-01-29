@@ -89,7 +89,8 @@ serve(async (req: Request) => {
         // =================================================================
         const { user, error: authError } = await authenticateUser(req)
         if (authError || !user) {
-            return errorResponse('Unauthorized', authError || 'NO_USER', 401)
+            logger.error('Authentication failed', { error: authError })
+            return errorResponse('Unauthorized', authError || 'NO_USER', 401, { debug: authError })
         }
 
         logger.info('User authenticated', { userId: user.id })
