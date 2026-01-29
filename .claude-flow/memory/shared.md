@@ -121,7 +121,7 @@
 | F004 | 🟢 Completed | 100% | - |
 | F005 | 🟢 Completed | 100% | - |
 | F006 | 🟢 Completed | 100% | - |
-| F007 | 🟡 In Progress | 33% | S2, S3 pending |
+| F007 | 🟡 In Progress | 67% | S3 pending |
 | F008 | 🟢 Completed | 100% | - |
 | F009 | 🔴 Planned | 0% | F006 (done) |
 | F010 | 🔴 Planned | 0% | F003 (done) |
@@ -129,18 +129,16 @@
 | F012 | 🟢 Completed | 100% | - |
 
 ### Upcoming Flows
-- F007 S2/S3: Ticket Delivery (QR display, check-in UI)
-- F009: Refund Flow
+- F007 S3: Ticket Delivery (Email delivery + PDF)
 - F010: Organizer Dashboard
 
 ---
 
 ## Next Actions
 
-1. Continue F007 S2: Ticket display UI improvements
-2. Start F009: Refund Flow
-3. Start F010: Organizer Dashboard
+1. Continue F007 S3: Email delivery + PDF tickets
+2. Start F010: Organizer Dashboard
 
 ---
 
-*Last updated: 2026-01-28*
+*Last updated: 2026-01-29*

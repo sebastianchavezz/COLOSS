@@ -13,7 +13,7 @@
 | F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
 | F005 | Ticket Selection | 🟢 | 2/2 | Done | ✅ |
 | F006 | Checkout/Payment | 🟢 | 1/1 | S1 Complete | ✅ |
-| F007 | Ticket Delivery | 🟡 | 1/3 | S1 Complete | ✅ |
+| F007 | Ticket Delivery | 🟡 | 2/3 | S2 Complete | ✅ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
 | F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
@@ -80,7 +80,7 @@ F001 (User Registration)
 | 1 | Authentication | F001, F002 | 🟢 Complete |
 | 2 | Events | F003, F010 | 🟡 Partial (F003 done) |
 | 3 | Discovery | F004, F005 | 🟢 Complete |
-| 4 | Checkout | F006, F007 | 🟡 Partial (F007 S1 done) |
+| 4 | Checkout | F006, F007 | 🟡 Partial (F007 S2 done) |
 | 5 | Support | F008, F009 | 🟢 Complete |
 
 ## Directory Structure
@@ -165,4 +165,4 @@ F001 (User Registration)
 
 ---
 
-*Last updated: 2026-01-28*
+*Last updated: 2026-01-29*

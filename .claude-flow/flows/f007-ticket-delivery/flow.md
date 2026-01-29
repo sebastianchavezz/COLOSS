@@ -3,13 +3,13 @@
 **ID**: F007
 **Status**: 🟡 In Progress
 **Total Sprints**: 3
-**Current Sprint**: S1 (Complete)
+**Current Sprint**: S2 (Complete)
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | S1 | Professional ticket scanning | ✅ Complete |
-| S2 | Ticket generation + QR | 🔴 Planned |
+| S2 | Mobile Ticket Scanner (BYOD) | ✅ Complete |
 | S3 | Email delivery + PDF | 🔴 Planned |
 
 ## Dependencies
@@ -108,10 +108,13 @@ Zodat ik toegang heb tot het evenement
 - [x] Scan statistics
 - [x] Tests passing (11 passed)
 
-**Sprint S2 (Generation)**:
-- [ ] Tickets auto-generated on payment
-- [ ] Unique QR code per ticket
-- [ ] Token hash creation
+**Sprint S2 (Mobile Scanner BYOD)**:
+- [x] Scanner setup page in event sidebar
+- [x] QR code generation for mobile access
+- [x] Mobile camera scanner (html5-qrcode)
+- [x] Haptic feedback on scan
+- [x] Manual token input fallback
+- [x] Real-time stats display
 
 **Sprint S3 (Delivery)**:
 - [ ] Email with tickets sent
@@ -139,5 +142,6 @@ See migrations:
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2026-01-29*
 *Sprint S1 completed: 2025-01-27*
+*Sprint S2 completed: 2026-01-29*
