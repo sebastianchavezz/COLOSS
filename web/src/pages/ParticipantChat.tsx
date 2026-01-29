@@ -31,7 +31,7 @@ interface Message {
 export function ParticipantChat() {
     const { eventSlug } = useParams<{ eventSlug: string }>()
     const navigate = useNavigate()
-    const { user, loading: authLoading } = useAuth()
+    const { user, session, loading: authLoading } = useAuth()
     const [eventId, setEventId] = useState<string | null>(null)
     const [threadId, setThreadId] = useState<string | null>(null)
     const [messages, setMessages] = useState<Message[]>([])
@@ -107,16 +107,10 @@ export function ParticipantChat() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
-    // Get auth token helper
-    const getAuthToken = async (): Promise<string | null> => {
-        const { data: { session } } = await supabase.auth.getSession()
-        return session?.access_token || null
-    }
-
     // Fetch messages for thread
     const fetchMessages = useCallback(async (tid: string) => {
         try {
-            const token = await getAuthToken()
+            const token = session?.access_token
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
             }
@@ -142,7 +136,7 @@ export function ParticipantChat() {
             console.error('[ParticipantChat] Error fetching messages:', err)
             setError(err.message || 'Fout bij laden berichten')
         }
-    }, [])
+    }, [session])
 
     // Send message
     const handleSendMessage = async () => {
@@ -152,13 +146,18 @@ export function ParticipantChat() {
         setError(null)
 
         try {
-            const token = await getAuthToken()
+            const token = session?.access_token
+            console.log('[ParticipantChat] Token obtained:', token ? 'yes (length: ' + token.length + ')' : 'no')
+
             if (!token) {
+                console.log('[ParticipantChat] No token, redirecting to login')
                 // Redirect to login
                 const returnUrl = `/e/${eventSlug}/chat`
                 navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`)
                 return
             }
+
+            console.log('[ParticipantChat] Sending message to event:', eventId)
 
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/send-message`,
@@ -177,7 +176,9 @@ export function ParticipantChat() {
             )
 
             if (!response.ok) {
-                throw new Error(`Failed to send message: ${response.statusText}`)
+                const errorBody = await response.text()
+                console.error('[ParticipantChat] Response error:', response.status, errorBody)
+                throw new Error(`Failed to send message: ${response.status} - ${errorBody}`)
             }
 
             const data = await response.json()
