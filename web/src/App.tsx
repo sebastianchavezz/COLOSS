@@ -41,6 +41,8 @@ import AuthCallback from './pages/AuthCallback'
 import AuthDebug from './components/AuthDebug'
 
 import { ScanPage } from './pages/ScanPage'
+import { Scanner } from './pages/events/Scanner'
+import { MobileScanner } from './pages/MobileScanner'
 import CheckIn from './pages/events/CheckIn'
 import Transfers from './pages/events/Transfers'
 import { EventRouteAdmin } from './pages/events/EventRouteAdmin'
@@ -51,9 +53,10 @@ import { PublicInvite } from './pages/public/PublicInvite'
 import { TeamPage } from './pages/TeamPage'
 import { Homepage } from './pages/Homepage'
 import { ComingSoon } from './pages/ComingSoon'
+import { SporterLayout, SporterDashboard, MijnTickets, Profiel } from './pages/sporter'
 
 // Set to true to enable "Coming Soon" mode for deployment
-const COMING_SOON_MODE = true
+const COMING_SOON_MODE = false
 
 function App() {
   // Coming Soon Mode - only homepage and coming-soon page work
@@ -99,8 +102,16 @@ function App() {
           {/* Protected Routes Wrapper */}
           <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
 
-            {/* Organizer Scan Route */}
+            {/* Sporter Dashboard Routes */}
+            <Route path="/my" element={<SporterLayout />}>
+              <Route index element={<SporterDashboard />} />
+              <Route path="tickets" element={<MijnTickets />} />
+              <Route path="profile" element={<Profiel />} />
+            </Route>
+
+            {/* Organizer Scan Routes */}
             <Route path="/scan/:eventSlug" element={<ScanPage />} />
+            <Route path="/scan/m/:eventSlug" element={<MobileScanner />} />
 
             {/* Operations Routes (Direct Access) */}
             <Route path="/events/:eventId/check-in" element={<CheckIn />} />
@@ -131,6 +142,7 @@ function App() {
                 <Route path="messaging" element={<EventMessaging />} />
                 <Route path="faq" element={<EventFaqAdmin />} />
                 <Route path="invitations" element={<EventInvitations />} />
+                <Route path="scanner" element={<Scanner />} />
                 <Route path="settings" element={<EventSettings />} />
               </Route>
 
