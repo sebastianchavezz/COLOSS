@@ -146,7 +146,10 @@ export function ParticipantChat() {
         setError(null)
 
         try {
-            const token = session?.access_token
+            // Refresh session to get fresh token (prevents "Invalid JWT" errors)
+            const { data: refreshedSession } = await supabase.auth.refreshSession()
+            const token = refreshedSession?.session?.access_token || session?.access_token
+
             console.log('[ParticipantChat] Token obtained:', token ? 'yes (length: ' + token.length + ')' : 'no')
 
             if (!token) {
