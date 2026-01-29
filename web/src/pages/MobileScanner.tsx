@@ -199,14 +199,29 @@ export function MobileScanner() {
     }
 
     // Start camera when event is loaded
+    const [scannerStarted, setScannerStarted] = useState(false)
+
     useEffect(() => {
-        if (event && !manualMode && cameras.length > 0) {
+        if (event && !manualMode && cameras.length > 0 && !scannerStarted && !isScanning) {
             startScanner()
+            setScannerStarted(true)
         }
-        return () => {
+    }, [event, manualMode, cameras.length, scannerStarted, isScanning, startScanner])
+
+    // Stop scanner when switching to manual mode
+    useEffect(() => {
+        if (manualMode && isScanning) {
             stopScanner()
+            setScannerStarted(false)
         }
-    }, [event, manualMode, cameras.length])
+    }, [manualMode, isScanning, stopScanner])
+
+    // Reset scannerStarted when switching back from manual mode
+    useEffect(() => {
+        if (!manualMode) {
+            setScannerStarted(false)
+        }
+    }, [manualMode])
 
     // Loading states
     if (authLoading || loading) {

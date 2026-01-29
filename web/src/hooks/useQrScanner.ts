@@ -47,9 +47,13 @@ export function useQrScanner(
     const scannerRef = useRef<Html5Qrcode | null>(null)
     const lastScanTimeRef = useRef<number>(0)
     const lastScanTokenRef = useRef<string>('')
+    const camerasLoadedRef = useRef(false)
 
-    // Load available cameras
+    // Load available cameras (only once)
     useEffect(() => {
+        if (camerasLoadedRef.current) return
+        camerasLoadedRef.current = true
+
         Html5Qrcode.getCameras()
             .then((devices) => {
                 const cameraList = devices.map((d) => ({
@@ -75,7 +79,7 @@ export function useQrScanner(
                 setError('Camera toegang geweigerd')
                 onError?.('Camera toegang geweigerd: ' + err.message)
             })
-    }, [onError])
+    }, []) // Empty deps - only run once
 
     // Cleanup on unmount
     useEffect(() => {
@@ -109,11 +113,18 @@ export function useQrScanner(
         [onScan, debounceMs]
     )
 
+    const startingRef = useRef(false)
+
     const start = useCallback(
         async (targetCameraId?: string) => {
+            // Prevent multiple simultaneous start attempts
+            if (startingRef.current) return
+            startingRef.current = true
+
             const camId = targetCameraId || cameraId
             if (!camId) {
                 setError('Geen camera beschikbaar')
+                startingRef.current = false
                 return
             }
 
@@ -125,10 +136,11 @@ export function useQrScanner(
                     scannerRef.current = new Html5Qrcode(containerId)
                 }
 
-                // Stop if already scanning
+                // Don't restart if already scanning
                 const state = scannerRef.current.getState()
                 if (state === Html5QrcodeScannerState.SCANNING) {
-                    await scannerRef.current.stop()
+                    startingRef.current = false
+                    return
                 }
 
                 // Start scanning
@@ -152,6 +164,8 @@ export function useQrScanner(
                 setError('Camera kon niet worden gestart: ' + message)
                 onError?.('Camera start error: ' + message)
                 setIsScanning(false)
+            } finally {
+                startingRef.current = false
             }
         },
         [containerId, cameraId, handleScanSuccess, onError]

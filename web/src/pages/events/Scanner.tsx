@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { QrCode, Copy, Check, RefreshCw, Users, Scan, AlertCircle } from 'lucide-react'
+import { QrCode, Copy, Check, RefreshCw, Users, Scan, AlertCircle, Wifi } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import type { AppEvent, Organization } from '../../types/supabase'
@@ -35,10 +35,28 @@ export function Scanner() {
     const [stats, setStats] = useState<ScanStats | null>(null)
     const [copied, setCopied] = useState(false)
     const [loading, setLoading] = useState(true)
+    const [useNetworkUrl, setUseNetworkUrl] = useState(() => {
+        // Default to network mode if on localhost
+        return window.location.hostname === 'localhost'
+    })
+    const [networkHost, setNetworkHost] = useState(() => {
+        // Load saved network host from localStorage
+        return localStorage.getItem('coloss_network_host') || '192.168.129.5:5173'
+    })
 
-    // Build scanner URL
+    // Save network host to localStorage when it changes
+    useEffect(() => {
+        localStorage.setItem('coloss_network_host', networkHost)
+    }, [networkHost])
+
+    // Build scanner URL - use network IP when in network mode
+    const isLocalhost = window.location.hostname === 'localhost'
+    const protocol = window.location.protocol // http: or https:
+    const baseUrl = useNetworkUrl && isLocalhost
+        ? `${protocol}//${networkHost}`
+        : window.location.origin
     const scannerUrl = event
-        ? `${window.location.origin}/scan/m/${event.slug}`
+        ? `${baseUrl}/scan/m/${event.slug}`
         : ''
 
     // Fetch stats
@@ -113,6 +131,48 @@ export function Scanner() {
                     </div>
 
                     <div className="space-y-4">
+                        {/* Network mode toggle (only shown on localhost) */}
+                        {isLocalhost && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center">
+                                        <Wifi className="h-4 w-4 text-amber-600 mr-2" />
+                                        <span className="text-sm font-medium text-amber-900">
+                                            Netwerk Modus
+                                        </span>
+                                    </div>
+                                    <button
+                                        onClick={() => setUseNetworkUrl(!useNetworkUrl)}
+                                        className={clsx(
+                                            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                                            useNetworkUrl ? 'bg-amber-500' : 'bg-gray-300'
+                                        )}
+                                    >
+                                        <span
+                                            className={clsx(
+                                                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                                                useNetworkUrl ? 'translate-x-6' : 'translate-x-1'
+                                            )}
+                                        />
+                                    </button>
+                                </div>
+                                {useNetworkUrl && (
+                                    <div>
+                                        <label className="block text-xs text-amber-700 mb-1">
+                                            Netwerk IP:poort
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={networkHost}
+                                            onChange={(e) => setNetworkHost(e.target.value)}
+                                            placeholder="192.168.1.100:5173"
+                                            className="w-full px-2 py-1 text-sm border border-amber-300 rounded bg-white focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Scanner URL
