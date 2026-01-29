@@ -263,11 +263,14 @@ serve(async (req: Request) => {
             logger.info('Thread resolved', { threadId: activeThreadId })
 
             // 4c. Update thread with participant access status (for organizer UI badge)
-            await supabaseAdmin
+            const { error: updateAccessError } = await supabaseAdmin
                 .from('chat_threads')
                 .update({ participant_has_access: participantHasAccess })
                 .eq('id', activeThreadId)
-                .catch((err) => logger.warn('Failed to update participant_has_access', { error: err.message }))
+
+            if (updateAccessError) {
+                logger.warn('Failed to update participant_has_access', { error: updateAccessError.message })
+            }
 
             // 4d. Get messaging settings for this event
             const { data: settings, error: settingsError } = await supabaseAdmin

@@ -8,3 +8,4 @@
 | B006 | Migrations not pushed - faq_items table missing on remote | Done | 28-01 |
 | B007 | CORS preflight fails - missing Access-Control-Allow-Methods header | Done | 28-01 |
 | B008 | get-threads 500 error - .offset() not a function, use .range() | Done | 28-01 |
+| B009 | send-message 500 error - .catch() is not a function on Supabase query | Done | 29-01 |
