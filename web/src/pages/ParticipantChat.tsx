@@ -12,9 +12,10 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { MessageSquare, ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -29,6 +30,8 @@ interface Message {
 
 export function ParticipantChat() {
     const { eventSlug } = useParams<{ eventSlug: string }>()
+    const navigate = useNavigate()
+    const { user, loading: authLoading } = useAuth()
     const [eventId, setEventId] = useState<string | null>(null)
     const [threadId, setThreadId] = useState<string | null>(null)
     const [messages, setMessages] = useState<Message[]>([])
@@ -38,9 +41,17 @@ export function ParticipantChat() {
     const [messageText, setMessageText] = useState('')
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
+    // Auth redirect - MUST be before any conditional returns
+    useEffect(() => {
+        if (!authLoading && !user) {
+            const returnUrl = `/e/${eventSlug}/chat`
+            navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`)
+        }
+    }, [authLoading, user, eventSlug, navigate])
+
     // Resolve eventSlug to event_id
     useEffect(() => {
-        if (!eventSlug) return
+        if (!eventSlug || !user) return
 
         const resolveEvent = async () => {
             try {
@@ -69,7 +80,7 @@ export function ParticipantChat() {
         }
 
         resolveEvent()
-    }, [eventSlug])
+    }, [eventSlug, user])
 
     // Fetch or create thread
     useEffect(() => {
@@ -96,16 +107,28 @@ export function ParticipantChat() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
+    // Get auth token helper
+    const getAuthToken = async (): Promise<string | null> => {
+        const { data: { session } } = await supabase.auth.getSession()
+        return session?.access_token || null
+    }
+
     // Fetch messages for thread
     const fetchMessages = useCallback(async (tid: string) => {
         try {
+            const token = await getAuthToken()
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            }
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`
+            }
+
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/get-thread-messages?thread_id=${tid}`,
                 {
                     method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers,
                 }
             )
 
@@ -129,12 +152,21 @@ export function ParticipantChat() {
         setError(null)
 
         try {
+            const token = await getAuthToken()
+            if (!token) {
+                // Redirect to login
+                const returnUrl = `/e/${eventSlug}/chat`
+                navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`)
+                return
+            }
+
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/send-message`,
                 {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                         event_id: eventId,
@@ -169,7 +201,8 @@ export function ParticipantChat() {
         }
     }
 
-    if (loading) {
+    // Show loading while checking auth or loading data
+    if (authLoading || loading || !user) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
@@ -199,7 +232,7 @@ export function ParticipantChat() {
             {/* Header */}
             <div className="bg-white border-b border-gray-200">
                 <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
-                    <Link to="/" className="text-gray-500 hover:text-gray-700">
+                    <Link to={`/events/${eventSlug}`} className="text-gray-500 hover:text-gray-700">
                         <ArrowLeft className="h-5 w-5" />
                     </Link>
                     <h1 className="text-lg font-medium text-gray-900 flex items-center gap-2">

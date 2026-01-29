@@ -1,7 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { MapPin, Calendar, Mail, ArrowLeft, Loader2, Ticket, AlertCircle } from 'lucide-react'
+import { PublicHeader } from '../../components/PublicHeader'
+import { RouteMap } from '../../components/RouteMap'
+import { formatDistance } from '../../lib/gpx'
+import { MapPin, Calendar, Mail, ArrowLeft, Loader2, Ticket, AlertCircle, Map, Ruler, ChevronDown, HelpCircle, MessageCircle } from 'lucide-react'
+import { clsx } from 'clsx'
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 interface TicketType {
     id: string
@@ -40,6 +46,31 @@ interface EventDetailResponse {
     ticket_types?: TicketType[]
 }
 
+interface FaqItem {
+    id: string
+    title: string
+    content: string
+    category: string
+    sort_order: number
+}
+
+interface EventRoute {
+    id: string
+    event_id: string
+    name: string
+    description: string | null
+    status: 'draft' | 'published'
+    route_geometry: number[][]
+    bounds: {
+        minLat: number
+        maxLat: number
+        minLng: number
+        maxLng: number
+    }
+    distance_m: number
+    point_count: number
+}
+
 export function PublicEventDetail() {
     const { slug } = useParams<{ slug: string }>()
     const [event, setEvent] = useState<EventDetail | null>(null)
@@ -47,11 +78,51 @@ export function PublicEventDetail() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
+    // FAQ state
+    const [faqItems, setFaqItems] = useState<FaqItem[]>([])
+    const [expandedFaqId, setExpandedFaqId] = useState<string | null>(null)
+
+    // Route state
+    const [route, setRoute] = useState<EventRoute | null>(null)
+
     useEffect(() => {
         if (slug) {
             fetchEventDetail()
         }
     }, [slug])
+
+    // Fetch FAQ items
+    const fetchFaqs = useCallback(async (eventId: string) => {
+        try {
+            const response = await fetch(
+                `${SUPABASE_URL}/functions/v1/get-faqs?event_id=${eventId}`,
+                {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            )
+            if (response.ok) {
+                const data = await response.json()
+                setFaqItems(data.faqs || [])
+            }
+        } catch (err) {
+            console.error('Error fetching FAQs:', err)
+        }
+    }, [])
+
+    // Fetch route
+    const fetchRoute = useCallback(async (eventId: string) => {
+        try {
+            const { data } = await supabase.rpc('get_event_route', {
+                _event_id: eventId,
+            })
+            if (data?.route) {
+                setRoute(data.route)
+            }
+        } catch (err) {
+            console.error('Error fetching route:', err)
+        }
+    }, [])
 
     async function fetchEventDetail() {
         setLoading(true)
@@ -73,6 +144,9 @@ export function PublicEventDetail() {
         } else if (response.status === 'OK' && response.event) {
             setEvent(response.event)
             setTicketTypes(response.ticket_types || [])
+            // Fetch additional data
+            fetchFaqs(response.event.id)
+            fetchRoute(response.event.id)
         } else {
             setError('Failed to load event')
         }
@@ -134,15 +208,17 @@ export function PublicEventDetail() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Back Link */}
-            <div className="bg-white border-b">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <PublicHeader />
+
+            {/* Back Navigation */}
+            <div className="bg-white border-b border-gray-100">
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
                     <Link
                         to="/events"
-                        className="text-sm text-gray-600 hover:text-gray-900 flex items-center"
+                        className="inline-flex items-center text-sm text-gray-600 hover:text-black"
                     >
                         <ArrowLeft className="h-4 w-4 mr-2" />
-                        Back to events
+                        Terug naar events
                     </Link>
                 </div>
             </div>
@@ -188,19 +264,116 @@ export function PublicEventDetail() {
                             )}
                         </div>
 
-                        {/* Contact */}
-                        {event.support_email && (
-                            <div className="mt-8 p-4 bg-gray-100 rounded-lg">
-                                <h3 className="text-sm font-medium text-gray-900 mb-2">Questions?</h3>
-                                <a
-                                    href={`mailto:${event.support_email}`}
-                                    className="text-sm text-indigo-600 hover:text-indigo-500 flex items-center"
+                        {/* Route Section */}
+                        {route && (
+                            <div className="mt-8">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                                        <Map className="h-5 w-5 mr-2 text-indigo-600" />
+                                        Route
+                                    </h2>
+                                    <div className="flex items-center text-sm text-gray-500">
+                                        <Ruler className="h-4 w-4 mr-1" />
+                                        {formatDistance(route.distance_m)}
+                                    </div>
+                                </div>
+                                {route.description && (
+                                    <p className="text-gray-600 text-sm mb-4">{route.description}</p>
+                                )}
+                                <div className="rounded-lg overflow-hidden border border-gray-200">
+                                    <RouteMap
+                                        geometry={route.route_geometry}
+                                        bounds={route.bounds}
+                                        height="300px"
+                                    />
+                                </div>
+                                <div className="mt-2 flex items-center justify-center space-x-6 text-xs text-gray-500">
+                                    <div className="flex items-center">
+                                        <div className="w-3 h-3 rounded-full bg-green-500 mr-1" />
+                                        Start
+                                    </div>
+                                    <div className="flex items-center">
+                                        <div className="w-3 h-3 rounded-full bg-red-500 mr-1" />
+                                        Finish
+                                    </div>
+                                </div>
+                                <Link
+                                    to={`/e/${event.slug}/route`}
+                                    className="mt-3 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500"
                                 >
-                                    <Mail className="h-4 w-4 mr-2" />
-                                    {event.support_email}
-                                </a>
+                                    Bekijk volledige route
+                                    <ArrowLeft className="h-4 w-4 ml-1 rotate-180" />
+                                </Link>
                             </div>
                         )}
+
+                        {/* FAQ Section */}
+                        {faqItems.length > 0 && (
+                            <div className="mt-8">
+                                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                    <HelpCircle className="h-5 w-5 mr-2 text-indigo-600" />
+                                    Veelgestelde vragen
+                                </h2>
+                                <div className="space-y-2">
+                                    {faqItems.slice(0, 5).map((faq) => (
+                                        <div
+                                            key={faq.id}
+                                            className="border border-gray-200 rounded-lg overflow-hidden"
+                                        >
+                                            <button
+                                                onClick={() => setExpandedFaqId(expandedFaqId === faq.id ? null : faq.id)}
+                                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors text-left"
+                                            >
+                                                <span className="font-medium text-gray-900 text-sm">{faq.title}</span>
+                                                <ChevronDown
+                                                    className={clsx(
+                                                        'h-4 w-4 text-gray-400 transition-transform flex-shrink-0 ml-2',
+                                                        expandedFaqId === faq.id && 'rotate-180'
+                                                    )}
+                                                />
+                                            </button>
+                                            {expandedFaqId === faq.id && (
+                                                <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+                                                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{faq.content}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                {faqItems.length > 5 && (
+                                    <Link
+                                        to={`/e/${event.slug}/faq`}
+                                        className="mt-3 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500"
+                                    >
+                                        Bekijk alle {faqItems.length} vragen
+                                        <ArrowLeft className="h-4 w-4 ml-1 rotate-180" />
+                                    </Link>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Contact */}
+                        <div className="mt-8 p-4 bg-gray-100 rounded-lg">
+                            <h3 className="text-sm font-medium text-gray-900 mb-2">Vragen?</h3>
+                            <div className="space-y-2">
+                                <Link
+                                    to={`/e/${event.slug}/chat`}
+                                    className="text-sm text-indigo-600 hover:text-indigo-500 flex items-center"
+                                >
+                                    <MessageCircle className="h-4 w-4 mr-2" />
+                                    Start een gesprek met de organisatie
+                                </Link>
+                                {event.support_email && (
+                                    <a
+                                        href={`mailto:${event.support_email}`}
+                                        className="text-sm text-gray-600 hover:text-gray-900 flex items-center"
+                                    >
+                                        <Mail className="h-4 w-4 mr-2" />
+                                        {event.support_email}
+                                    </a>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     {/* Tickets Sidebar */}
