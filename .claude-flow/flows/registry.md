@@ -18,7 +18,7 @@
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
 | F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
 | F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
-| F012 | Event Communication (Messaging + FAQ) | 🟢 | 1/1 | Done | ✅ |
+| F012 | Event Communication (Messaging + FAQ) | 🟢 | 3/3 | S3 Open Chat | ✅ |
 | F013 | Invitation System | 🟢 | 1/1 | Done | ✅ |
 | F014 | Team Management (RBAC) | 🟢 | 1/1 | Done | ✅ |
 

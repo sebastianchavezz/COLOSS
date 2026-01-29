@@ -5,8 +5,16 @@
 ## Summary
 
 Participant-organizer messaging (threaded chat) + FAQ management for events.
-Participants can open support threads and communicate with organizers.
+Any logged-in user can open support threads (pre-purchase questions allowed).
 Organizers can manage FAQ items at org or event scope.
+
+## Sprints
+
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| S1 | Backend infrastructure | 🟢 Done |
+| S2 | Frontend UI | 🟢 Done |
+| S3 | Open Chat Access | 🟢 Done |
 
 ## Dependency
 
@@ -25,10 +33,13 @@ Organizers can manage FAQ items at org or event scope.
 | Edge Functions | 🟢 Done | `supabase/functions/send-message/`, `get-threads/`, etc. |
 | Frontend Components | 🟢 Done | `web/src/pages/EventMessaging.tsx`, `ParticipantChat.tsx`, etc. |
 | Tests | 🟢 Done | `tests/full-test-suite.sql` (32/32 passing) |
+| S3 Open Chat Migration | 🟢 Done | `supabase/migrations/20260129121813_f012_open_chat_access.sql` |
+| S3 Tests | 🟢 Done | `tests/s3-open-chat-tests.mjs` (7/7 passing) |
 
 ## Tables
 
 - `chat_threads` - Support threads (1 per participant per event)
+  - `participant_has_access` (S3) - Tracks if participant has ticket/registration for organizer UI badge
 - `chat_messages` - Messages within threads (append-only)
 - `chat_thread_reads` - Read receipts for organizers
 - `faq_items` - FAQ entries (org-wide or event-specific)
