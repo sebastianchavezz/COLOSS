@@ -1,4 +1,4 @@
-import React from 'react'
+// StatusBadge component
 
 interface StatusBadgeProps {
     status: string

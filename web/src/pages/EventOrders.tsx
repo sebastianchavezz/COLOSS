@@ -42,6 +42,7 @@ export function EventOrders() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [simulating, setSimulating] = useState(false)
+    const [fixingFreeOrders, setFixingFreeOrders] = useState(false)
 
     // Fetch orders
     useEffect(() => {
@@ -137,6 +138,43 @@ export function EventOrders() {
         setSimulating(false)
     }
 
+    // Fix all free orders that are stuck on pending
+    const handleFixFreeOrders = async () => {
+        if (!event) return
+
+        setFixingFreeOrders(true)
+        setError(null)
+
+        try {
+            // Update all free pending orders to paid
+            const { error: updateError, count } = await supabase
+                .from('orders')
+                .update({ status: 'paid', updated_at: new Date().toISOString() })
+                .eq('event_id', event.id)
+                .eq('status', 'pending')
+                .eq('total_amount', 0)
+
+            if (updateError) {
+                console.error('[EventOrders] Fix free orders error:', updateError)
+                setError(updateError.message)
+            } else {
+                console.log('[EventOrders] Fixed free orders:', count)
+                // Refresh orders list
+                const { data: refreshedOrders } = await supabase
+                    .from('orders')
+                    .select('*')
+                    .eq('event_id', event.id)
+                    .order('created_at', { ascending: false })
+                setOrders(refreshedOrders || [])
+            }
+        } catch (err: any) {
+            console.error('[EventOrders] Error:', err)
+            setError(err.message)
+        }
+
+        setFixingFreeOrders(false)
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-32">
@@ -153,23 +191,35 @@ export function EventOrders() {
                     <h3 className="text-lg font-medium text-gray-900">Bestellingen</h3>
                     <p className="text-sm text-gray-500">Alle orders voor dit evenement.</p>
                 </div>
-                <button
-                    onClick={handleSimulateFreeOrder}
-                    disabled={simulating}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                >
-                    {simulating ? (
-                        <>
-                            <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                            Simuleren...
-                        </>
-                    ) : (
-                        <>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Simuleer gratis bestelling
-                        </>
+                <div className="flex gap-2">
+                    {/* Fix Free Orders Button - only show if there are pending free orders */}
+                    {orders.some(o => o.status === 'pending' && o.total_amount === 0) && (
+                        <button
+                            onClick={handleFixFreeOrders}
+                            disabled={fixingFreeOrders}
+                            className="inline-flex items-center px-3 py-2 border border-yellow-300 text-sm font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 disabled:opacity-50"
+                        >
+                            {fixingFreeOrders ? 'Fixen...' : 'Fix gratis orders'}
+                        </button>
                     )}
-                </button>
+                    <button
+                        onClick={handleSimulateFreeOrder}
+                        disabled={simulating}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                        {simulating ? (
+                            <>
+                                <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                                Simuleren...
+                            </>
+                        ) : (
+                            <>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Simuleer gratis bestelling
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
 
             {/* Error */}
@@ -212,37 +262,164 @@ export function EventOrders() {
                         </thead>
                         <tbody className="divide-y divide-gray-200 bg-white">
                             {orders.map((order) => (
-                                <tr key={order.id} className="hover:bg-gray-50">
-                                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm">
-                                        <div className="font-medium text-gray-900">{order.email}</div>
-                                        <div className="text-gray-500 text-xs">{order.id.slice(0, 8)}</div>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
-                                        {order.total_amount === 0 ? (
-                                            <span className="text-green-600 font-medium">Gratis</span>
-                                        ) : (
-                                            `€${parseFloat(order.total_amount.toString()).toFixed(2)}`
-                                        )}
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                        <OrderStatusBadge status={order.status} />
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                                        {new Date(order.created_at).toLocaleDateString('nl-NL', {
-                                            day: 'numeric',
-                                            month: 'short',
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
-                                    </td>
-                                </tr>
+                                <OrderRow
+                                    key={order.id}
+                                    order={order}
+                                    onStatusUpdated={(newStatus) => {
+                                        setOrders(prev => prev.map(o =>
+                                            o.id === order.id ? { ...o, status: newStatus } : o
+                                        ))
+                                    }}
+                                />
                             ))}
                         </tbody>
                     </table>
                 </div>
             )}
         </div>
+    )
+}
+
+/**
+ * Order Row Component with refresh capability
+ */
+function OrderRow({ order, onStatusUpdated }: { order: Order; onStatusUpdated: (status: string) => void }) {
+    const [refreshing, setRefreshing] = useState(false)
+    const [syncing, setSyncing] = useState(false)
+
+    const handleRefreshStatus = async () => {
+        if (order.status !== 'pending' || order.total_amount === 0) return
+
+        setRefreshing(true)
+        try {
+            // Fetch payment for this order
+            const { data: payment } = await supabase
+                .from('payments')
+                .select('provider_payment_id, status')
+                .eq('order_id', order.id)
+                .single()
+
+            if (payment?.provider_payment_id) {
+                // Trigger webhook manually by calling mollie-webhook
+                const formData = new URLSearchParams()
+                formData.append('id', payment.provider_payment_id)
+
+                const response = await fetch(
+                    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mollie-webhook`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: formData.toString()
+                    }
+                )
+
+                if (response.ok) {
+                    // Refetch order status
+                    const { data: updatedOrder } = await supabase
+                        .from('orders')
+                        .select('status')
+                        .eq('id', order.id)
+                        .single()
+
+                    if (updatedOrder?.status && updatedOrder.status !== order.status) {
+                        onStatusUpdated(updatedOrder.status)
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Failed to refresh status:', err)
+        } finally {
+            setRefreshing(false)
+        }
+    }
+
+    // Force sync: update order to paid + call sync RPC
+    const handleForceSync = async () => {
+        setSyncing(true)
+        try {
+            // 1. Update order status directly to paid
+            const { error: updateError } = await supabase
+                .from('orders')
+                .update({ status: 'paid', updated_at: new Date().toISOString() })
+                .eq('id', order.id)
+
+            if (updateError) {
+                console.error('Failed to update order:', updateError)
+                return
+            }
+
+            // 2. Update payment status to paid
+            await supabase
+                .from('payments')
+                .update({ status: 'paid', updated_at: new Date().toISOString() })
+                .eq('order_id', order.id)
+
+            // 3. Call sync_registration_on_payment RPC
+            const { data: syncResult, error: syncError } = await supabase
+                .rpc('sync_registration_on_payment', { p_order_id: order.id })
+
+            if (syncError) {
+                console.error('Sync RPC failed:', syncError)
+            } else {
+                console.log('Sync result:', syncResult)
+            }
+
+            onStatusUpdated('paid')
+        } catch (err) {
+            console.error('Force sync failed:', err)
+        } finally {
+            setSyncing(false)
+        }
+    }
+
+    return (
+        <tr className="hover:bg-gray-50">
+            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm">
+                <div className="font-medium text-gray-900">{order.email}</div>
+                <div className="text-gray-500 text-xs">{order.id.slice(0, 8)}</div>
+            </td>
+            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
+                {order.total_amount === 0 ? (
+                    <span className="text-green-600 font-medium">Gratis</span>
+                ) : (
+                    `€${parseFloat(order.total_amount.toString()).toFixed(2)}`
+                )}
+            </td>
+            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                <div className="flex items-center gap-2">
+                    <OrderStatusBadge status={order.status} />
+                    {order.status === 'pending' && order.total_amount > 0 && (
+                        <>
+                            <button
+                                onClick={handleRefreshStatus}
+                                disabled={refreshing || syncing}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                                title="Check payment status bij Mollie"
+                            >
+                                {refreshing ? '...' : '↻'}
+                            </button>
+                            <button
+                                onClick={handleForceSync}
+                                disabled={syncing || refreshing}
+                                className="text-xs text-green-600 hover:text-green-800 disabled:opacity-50 ml-1"
+                                title="Forceer sync naar betaald"
+                            >
+                                {syncing ? '...' : '✓ Fix'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </td>
+            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                {new Date(order.created_at).toLocaleDateString('nl-NL', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}
+            </td>
+        </tr>
     )
 }
 

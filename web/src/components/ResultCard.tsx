@@ -1,4 +1,4 @@
-import React from 'react'
+// ResultCard component
 
 interface ResultCardProps {
     result: {

@@ -357,7 +357,7 @@ BEGIN
     WHERE id = v_route.id;
 
     -- Audit log
-    INSERT INTO audit_log (org_id, entity_type, entity_id, action, actor_id, metadata)
+    INSERT INTO audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
     VALUES (
         v_route.org_id,
         'event_route',
@@ -424,7 +424,7 @@ BEGIN
     WHERE id = v_route.id;
 
     -- Audit log
-    INSERT INTO audit_log (org_id, entity_type, entity_id, action, actor_id, metadata)
+    INSERT INTO audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
     VALUES (
         v_route.org_id,
         'event_route',
@@ -514,7 +514,7 @@ BEGIN
     RETURNING id INTO v_route_id;
 
     -- Audit log
-    INSERT INTO audit_log (org_id, entity_type, entity_id, action, actor_id, metadata)
+    INSERT INTO audit_log (org_id, entity_type, entity_id, action, actor_user_id, metadata)
     VALUES (
         v_event.org_id,
         'event_route',

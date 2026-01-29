@@ -1,0 +1,396 @@
+/**
+ * Homepage Styles
+ * Based on Figma export: coloss-web-front
+ * Original CSS preserved, responsive additions only
+ */
+
+/* ========== BASE STYLES (FROM FIGMA) ========== */
+.homepage {
+  width: 100%;
+  display: flex;
+  overflow-x: hidden;
+  min-height: 100vh;
+  align-items: center;
+  flex-direction: column;
+}
+
+.homepage-content {
+  width: 100%;
+  height: auto;
+  display: flex;
+  align-items: flex-start;
+  flex-shrink: 0;
+  flex-direction: column;
+  background-color: rgba(10, 10, 10, 1);
+}
+
+/* ========== HERO SECTION (FROM FIGMA) ========== */
+.hero-section {
+  width: 100%;
+  min-width: 100vw;
+  height: 774px;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  align-items: flex-start;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  background-color: #1a0a00;
+  background-image: url("/images/hero-bg.png");
+  background-size: cover;
+  background-position: 30% top;
+  background-repeat: no-repeat;
+}
+
+/* Background image layer (FROM FIGMA) */
+.hero-bg {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+  position: absolute;
+  align-items: flex-start;
+  flex-shrink: 0;
+  background-size: cover;
+  background-image: url("/images/hero-bg.png");
+  background-position: center;
+}
+
+/* ========== HERO LOGO ========== */
+.hero-logo {
+  position: relative;
+  z-index: 10;
+  margin-top: 60px;
+  margin-bottom: 0;
+  color: #0917E4;
+  font-size: 66px;
+  font-family: 'Panchang', sans-serif;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+/* ========== NAVIGATION (FROM FIGMA) ========== */
+.hero-nav {
+  gap: 27px;
+  display: flex;
+  position: relative;
+  z-index: 10;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+
+.nav-link {
+  color: rgba(237, 237, 237, 1);
+  height: auto;
+  font-size: 24px;
+  font-style: normal;
+  text-align: left;
+  font-family: 'Albert Sans', sans-serif;
+  font-weight: 700;
+  line-height: 24px;
+  font-stretch: normal;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.nav-link:hover {
+  opacity: 0.8;
+}
+
+/* ========== CTA BUTTON (FROM FIGMA) ========== */
+.cta-button {
+  position: absolute;
+  bottom: 77px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: auto;
+  height: 44px;
+  display: flex;
+  padding: 1px 24px;
+  box-shadow: 0px 4px 4px 0px rgba(0, 0, 0, 0.25);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-color: rgba(255, 254, 254, 0.30);
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 3px;
+  color: rgba(234, 234, 234, 1);
+  font-size: 23px;
+  font-style: normal;
+  text-align: center;
+  font-family: 'Albert Sans', sans-serif;
+  font-weight: 600;
+  line-height: 24px;
+  font-stretch: normal;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.cta-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ========== MANIFESTO SECTION (FROM FIGMA) ========== */
+.manifesto-section {
+  gap: 48px;
+  width: 100%;
+  min-height: 385px;
+  display: flex;
+  padding: 128px 191px 64px 32px;
+  align-items: flex-start;
+  flex-shrink: 0;
+  flex-direction: column;
+  background-color: rgba(237, 237, 237, 1);
+}
+
+.manifesto-content {
+  gap: 24px;
+  display: flex;
+  align-self: stretch;
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.manifesto-text {
+  color: rgba(10, 10, 10, 1);
+  width: 100%;
+  max-width: 1207px;
+  height: auto;
+  font-size: 22px;
+  font-style: normal;
+  text-align: left;
+  font-family: 'Albert Sans', sans-serif;
+  font-weight: 400;
+  line-height: 31px;
+  font-stretch: normal;
+  text-decoration: none;
+}
+
+.manifesto-bold {
+  font-weight: 800;
+}
+
+/* ========== FOOTER SECTION (FROM FIGMA) ========== */
+.footer-section {
+  width: 100%;
+  height: 115px;
+  display: flex;
+  padding: 49px 32px 0;
+  align-items: flex-start;
+  flex-shrink: 0;
+  border-color: rgba(255, 254, 254, 0.10);
+  border-style: solid;
+  border-width: 1px 0 0;
+  flex-direction: column;
+  background-color: rgba(10, 10, 10, 1);
+}
+
+.footer-content {
+  gap: 620px;
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  flex-shrink: 0;
+  justify-content: space-between;
+}
+
+.footer-logo {
+  color: rgba(255, 254, 254, 0.4);
+  height: auto;
+  font-size: 16px;
+  font-style: normal;
+  text-align: left;
+  font-family: 'Panchang', sans-serif;
+  font-weight: 800;
+  line-height: 24px;
+  font-stretch: normal;
+  text-decoration: none;
+}
+
+.footer-links {
+  gap: 32px;
+  display: flex;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.footer-link {
+  color: rgba(255, 254, 254, 0.4);
+  height: auto;
+  font-size: 22px;
+  font-style: normal;
+  text-align: left;
+  font-family: 'Albert Sans', sans-serif;
+  font-weight: 400;
+  line-height: 24px;
+  font-stretch: normal;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer-link:hover {
+  color: rgba(255, 254, 254, 0.7);
+}
+
+
+/* ============================================== */
+/* ========== RESPONSIVE ADDITIONS ONLY ========= */
+/* ============================================== */
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .hero-section {
+    height: 650px;
+  }
+
+  .hero-logo {
+    margin-top: 50px;
+    font-size: 56px;
+  }
+
+  .hero-nav {
+    gap: 20px;
+  }
+
+  .nav-link {
+    font-size: 20px;
+  }
+
+  .cta-button {
+    bottom: 60px;
+    font-size: 20px;
+  }
+
+  .manifesto-section {
+    padding: 80px 60px 48px 32px;
+  }
+
+  .manifesto-text {
+    font-size: 20px;
+    line-height: 28px;
+  }
+
+  .footer-content {
+    gap: 100px;
+  }
+}
+
+/* iPhone / Mobile */
+@media (max-width: 768px) {
+  .hero-section {
+    height: 85vh;
+    min-height: 520px;
+  }
+
+  .hero-logo {
+    margin-top: 70px;
+    font-size: 40px;
+  }
+
+  .hero-nav {
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-top: 16px;
+  }
+
+  .nav-link {
+    font-size: 18px;
+    line-height: 22px;
+  }
+
+  .cta-button {
+    bottom: 50px;
+    font-size: 16px;
+    height: 40px;
+    padding: 1px 20px;
+  }
+
+  .manifesto-section {
+    padding: 48px 24px;
+    min-height: auto;
+  }
+
+  .manifesto-text {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .footer-section {
+    height: auto;
+    padding: 32px 24px;
+  }
+
+  .footer-content {
+    flex-direction: column;
+    gap: 20px;
+    align-items: flex-start;
+  }
+
+  .footer-logo {
+    font-size: 14px;
+  }
+
+  .footer-links {
+    gap: 24px;
+  }
+
+  .footer-link {
+    font-size: 18px;
+  }
+}
+
+/* Small Phones (iPhone SE, etc) */
+@media (max-width: 375px) {
+  .hero-section {
+    height: 80vh;
+    min-height: 480px;
+  }
+
+  .hero-logo {
+    margin-top: 60px;
+    font-size: 34px;
+  }
+
+  .hero-nav {
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .nav-link {
+    font-size: 16px;
+    line-height: 20px;
+  }
+
+  .cta-button {
+    bottom: 40px;
+    font-size: 14px;
+    height: 38px;
+    padding: 1px 16px;
+  }
+
+  .manifesto-section {
+    padding: 36px 20px;
+  }
+
+  .manifesto-text {
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .footer-section {
+    padding: 24px 20px;
+  }
+
+  .footer-link {
+    font-size: 16px;
+  }
+}

@@ -19,6 +19,8 @@
 | F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
 | F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
 | F012 | Event Communication (Messaging + FAQ) | 🟢 | 1/1 | Done | ✅ |
+| F013 | Invitation System | 🟢 | 1/1 | Done | ✅ |
+| F014 | Team Management (RBAC) | 🟢 | 1/1 | Done | ✅ |
 
 ## Status Legend
 
@@ -33,10 +35,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Flows | 12 |
+| Total Flows | 14 |
 | 🔴 Planned | 1 |
 | 🟡 Active | 1 |
-| 🟢 Done | 10 |
+| 🟢 Done | 12 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph

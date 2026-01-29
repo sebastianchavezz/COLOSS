@@ -25,6 +25,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { handleCors, corsHeaders } from '../_shared/cors.ts'
 import { getServiceClient } from '../_shared/supabase.ts'
 import { createLogger } from '../_shared/logger.ts'
 
@@ -52,6 +53,10 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
 }
 
 serve(async (req: Request) => {
+    // Handle CORS preflight
+    const corsResponse = handleCors(req)
+    if (corsResponse) return corsResponse
+
     const startTime = Date.now()
     const logger = createLogger('mollie-webhook')
     logger.info('Webhook invoked', { method: req.method })
@@ -67,13 +72,13 @@ serve(async (req: Request) => {
         } catch (parseError) {
             logger.warn('Failed to parse form data', parseError)
             // Return 200 per Mollie best practice (no info leakage)
-            return new Response('OK', { status: 200 })
+            return new Response('OK', { status: 200, headers: corsHeaders })
         }
 
         if (!molliePaymentId) {
             logger.warn('Missing payment id in webhook payload')
             // Return 200 per Mollie best practice (no info leakage)
-            return new Response('OK', { status: 200 })
+            return new Response('OK', { status: 200, headers: corsHeaders })
         }
 
         const idStr = String(molliePaymentId)
@@ -86,7 +91,7 @@ serve(async (req: Request) => {
         if (!mollieApiKey) {
             logger.error('Missing MOLLIE_API_KEY environment variable')
             // Return 500 so Mollie retries when we fix config
-            return new Response('Server Configuration Error', { status: 500 })
+            return new Response('Server Configuration Error', { status: 500, headers: corsHeaders })
         }
 
         // Log if we're in test mode
@@ -118,7 +123,7 @@ serve(async (req: Request) => {
             // BEST PRACTICE: Return 200 for unknown IDs (security: no info leakage)
             if (mollieResponse.status === 404) {
                 logger.warn('Payment not found at Mollie (returning 200)', { paymentId: idStr })
-                return new Response('OK', { status: 200 })
+                return new Response('OK', { status: 200, headers: corsHeaders })
             }
 
             if (!mollieResponse.ok) {
@@ -127,7 +132,7 @@ serve(async (req: Request) => {
                     paymentId: idStr
                 })
                 // Return 502 so Mollie retries
-                return new Response('Mollie API Error', { status: 502 })
+                return new Response('Mollie API Error', { status: 502, headers: corsHeaders })
             }
 
             molliePayment = await mollieResponse.json()
@@ -138,7 +143,7 @@ serve(async (req: Request) => {
                 logger.error('Mollie API fetch exception', fetchErr)
             }
             // Return 502 so Mollie retries
-            return new Response('Mollie API Unreachable', { status: 502 })
+            return new Response('Mollie API Unreachable', { status: 502, headers: corsHeaders })
         }
 
         const { status, metadata } = molliePayment
@@ -147,7 +152,7 @@ serve(async (req: Request) => {
         if (!orderId) {
             logger.warn('No order_id in payment metadata', { paymentId: idStr, status })
             // Return 200 to stop retries (this payment has no order association in our system)
-            return new Response('OK', { status: 200 })
+            return new Response('OK', { status: 200, headers: corsHeaders })
         }
 
         logger.info('Payment status from Mollie', {
@@ -177,7 +182,7 @@ serve(async (req: Request) => {
             // Unique constraint violation (23505) = already processed
             if (eventError.code === '23505') {
                 logger.info('Event already processed (idempotent)', { eventKey })
-                return new Response('OK', { status: 200 })
+                return new Response('OK', { status: 200, headers: corsHeaders })
             }
             // Other DB error → return 500 so Mollie retries
             logger.error('DB Error inserting payment_event', {
@@ -185,7 +190,7 @@ serve(async (req: Request) => {
                 code: eventError.code,
                 eventKey
             })
-            return new Response('Database Error', { status: 500 })
+            return new Response('Database Error', { status: 500, headers: corsHeaders })
         }
 
         logger.info('Payment event recorded', { eventKey })
@@ -207,7 +212,7 @@ serve(async (req: Request) => {
                 status
             })
             // Return 500 so Mollie retries — idempotency check will catch duplicates
-            return new Response('Transaction Failed', { status: 500 })
+            return new Response('Transaction Failed', { status: 500, headers: corsHeaders })
         }
 
         // Log result
@@ -240,14 +245,14 @@ serve(async (req: Request) => {
         const duration = Date.now() - startTime
         logger.info('Webhook completed', { eventKey, status, durationMs: duration })
 
-        return new Response('OK', { status: 200 })
+        return new Response('OK', { status: 200, headers: corsHeaders })
 
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
         const duration = Date.now() - startTime
         logger.error('Unexpected error in webhook', { error: message, durationMs: duration })
         // Return 500 so Mollie retries
-        return new Response('Internal Server Error', { status: 500 })
+        return new Response('Internal Server Error', { status: 500, headers: corsHeaders })
     }
 })
 
@@ -275,7 +280,7 @@ async function handleRefundWebhook(
         // Return 200 for unknown IDs (security best practice)
         if (refundResponse.status === 404) {
             logger.warn('Refund not found at Mollie (returning 200)', { refundId: mollieRefundId })
-            return new Response('OK', { status: 200 })
+            return new Response('OK', { status: 200, headers: corsHeaders })
         }
 
         if (!refundResponse.ok) {
@@ -283,7 +288,7 @@ async function handleRefundWebhook(
                 status: refundResponse.status,
                 refundId: mollieRefundId
             })
-            return new Response('Mollie API Error', { status: 502 })
+            return new Response('Mollie API Error', { status: 502, headers: corsHeaders })
         }
 
         mollieRefund = await refundResponse.json()
@@ -293,7 +298,7 @@ async function handleRefundWebhook(
         } else {
             logger.error('Mollie refund fetch exception', fetchErr)
         }
-        return new Response('Mollie API Unreachable', { status: 502 })
+        return new Response('Mollie API Unreachable', { status: 502, headers: corsHeaders })
     }
 
     const { status } = mollieRefund
@@ -319,14 +324,14 @@ async function handleRefundWebhook(
     if (eventError) {
         if (eventError.code === '23505') {
             logger.info('Refund event already processed (idempotent)', { eventKey })
-            return new Response('OK', { status: 200 })
+            return new Response('OK', { status: 200, headers: corsHeaders })
         }
         logger.error('DB Error inserting refund event', {
             error: eventError.message,
             code: eventError.code,
             eventKey
         })
-        return new Response('Database Error', { status: 500 })
+        return new Response('Database Error', { status: 500, headers: corsHeaders })
     }
 
     // Call RPC to handle refund status update
@@ -342,7 +347,7 @@ async function handleRefundWebhook(
             code: rpcError.code,
             refundId: mollieRefundId
         })
-        return new Response('Transaction Failed', { status: 500 })
+        return new Response('Transaction Failed', { status: 500, headers: corsHeaders })
     }
 
     // Log result
@@ -369,5 +374,5 @@ async function handleRefundWebhook(
         durationMs: duration
     })
 
-    return new Response('OK', { status: 200 })
+    return new Response('OK', { status: 200, headers: corsHeaders })
 }

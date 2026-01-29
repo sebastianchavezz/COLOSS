@@ -45,7 +45,7 @@ export function ScanPage() {
         async function fetchEvent() {
             if (!eventSlug) return
 
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('events')
                 .select('id, name')
                 .eq('slug', eventSlug)
@@ -62,7 +62,7 @@ export function ScanPage() {
 
     // Load scan statistics
     async function loadStats(eventId: string) {
-        const { data, error } = await supabase.rpc('get_scan_stats', {
+        const { data } = await supabase.rpc('get_scan_stats', {
             _event_id: eventId,
             _time_window_minutes: 60
         })
@@ -273,8 +273,7 @@ function ScanResultCard({ result }: { result: ScanResult }) {
     const isSuccess = result.result === 'VALID'
     const isAlreadyUsed = result.result === 'ALREADY_USED'
     const isRateLimited = result.result === 'RATE_LIMIT_EXCEEDED'
-    const isInvalidScan = ['INVALID', 'NOT_IN_EVENT', 'CANCELLED', 'REFUNDED'].includes(result.result)
-    const isSystemError = result.result === 'ERROR'
+    // isInvalidScan and isSystemError both fall through to the default red styling
 
     const bgColor = isSuccess
         ? 'bg-green-50 border-green-200'

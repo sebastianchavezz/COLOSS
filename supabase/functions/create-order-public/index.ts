@@ -154,7 +154,7 @@ serve(async (req: Request) => {
         // =================================================================
         const { data: event, error: eventError } = await supabaseAdmin
             .from('events')
-            .select('id, name, org_id, status')
+            .select('id, name, slug, org_id, status')
             .eq('id', event_id)
             .single()
 
@@ -297,10 +297,16 @@ serve(async (req: Request) => {
             logger.info('Free order detected — issuing tickets immediately')
 
             // Mark order as paid (free = instant)
-            await supabaseAdmin
+            const { error: updateError } = await supabaseAdmin
                 .from('orders')
                 .update({ status: 'paid' })
                 .eq('id', order.id)
+
+            if (updateError) {
+                logger.error('Failed to update order to paid', updateError)
+            } else {
+                logger.info('Order marked as paid (free)')
+            }
 
             // Call issue-tickets function internally
             const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY') ??
@@ -359,7 +365,9 @@ serve(async (req: Request) => {
             }
 
             const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-            const origin = req.headers.get('origin') || 'https://localhost:3000'
+            // Determine redirect URL: env var > origin header > default
+            const frontendUrl = Deno.env.get('FRONTEND_URL')
+            const origin = frontendUrl || req.headers.get('origin') || 'http://localhost:5173'
 
             // Format amount for Mollie: EUR value as string with 2 decimals
             const amountString = serverPrice.toFixed(2)
@@ -370,7 +378,7 @@ serve(async (req: Request) => {
                     value: amountString,
                 },
                 description: `Bestelling ${order.id.slice(0, 8)}`,
-                redirectUrl: `${origin}/checkout/success?token=${publicToken}`,
+                redirectUrl: `${origin}/e/${event.slug}/confirm?token=${publicToken}`,
                 webhookUrl: `${supabaseUrl}/functions/v1/mollie-webhook`,
                 metadata: {
                     order_id: order.id,

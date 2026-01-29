@@ -23,6 +23,7 @@ archive/
 *.pem
 secrets/
 .secrets/
+.mcp.json
 
 # Dependencies
 node_modules/
@@ -117,3 +118,6 @@ ENV/
 # - JWT secrets
 # - User data exports
 # ============================================================================
+
+# Local Netlify folder
+.netlify

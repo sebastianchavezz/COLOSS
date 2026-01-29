@@ -145,15 +145,77 @@ export function EventRouteAdminContent({
     setUploadError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('process-gpx', {
-        body: {
+      // Get current session for auth header
+      let { data: { session } } = await supabase.auth.getSession();
+
+      console.log('[GPX Upload] Session:', session ? 'Found' : 'Not found');
+      console.log('[GPX Upload] Access token length:', session?.access_token?.length);
+      console.log('[GPX Upload] Access token (full):', session?.access_token);
+      console.log('[GPX Upload] Token expires at:', session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'Unknown');
+      console.log('[GPX Upload] Current time:', new Date().toISOString());
+
+      // Decode JWT to inspect
+      if (session?.access_token) {
+        try {
+          const parts = session.access_token.split('.');
+          console.log('[GPX Upload] JWT parts:', parts.length);
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]));
+            console.log('[GPX Upload] JWT payload:', payload);
+            console.log('[GPX Upload] JWT iss:', payload.iss);
+            console.log('[GPX Upload] JWT aud:', payload.aud);
+            console.log('[GPX Upload] JWT role:', payload.role);
+          }
+        } catch (e) {
+          console.error('[GPX Upload] Failed to decode JWT:', e);
+        }
+      }
+
+      if (!session?.access_token) {
+        throw new Error('Je bent niet ingelogd. Log opnieuw in en probeer het nog eens.');
+      }
+
+      // Check if token is expired and try to refresh
+      const expiresAt = session.expires_at;
+      const now = Math.floor(Date.now() / 1000);
+      if (expiresAt && expiresAt < now) {
+        console.log('[GPX Upload] Token expired, attempting refresh...');
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !refreshData.session) {
+          console.error('[GPX Upload] Refresh failed:', refreshError);
+          throw new Error('Sessie verlopen. Log opnieuw in.');
+        }
+        session = refreshData.session;
+        console.log('[GPX Upload] Token refreshed successfully');
+      }
+
+      console.log('[GPX Upload] Calling process-gpx with direct fetch');
+
+      // Use direct fetch instead of supabase.functions.invoke to ensure headers are sent
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const response = await fetch(`${supabaseUrl}/functions/v1/process-gpx`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseAnonKey, // Required for Edge Functions!
+        },
+        body: JSON.stringify({
           event_id: eventId,
           gpx_content: gpxContent,
           name: preview?.name || 'Route',
-        },
+        }),
       });
 
-      if (fnError) throw fnError;
+      console.log('[GPX Upload] Response status:', response.status);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || `HTTP ${response.status}`);
+      }
+
       if (data?.error) throw new Error(data.error);
 
       // Refresh route data

@@ -1,8 +1,13 @@
 # Project: Sport Event Registration & Ticketing Backend (Supabase)
 
 ## Doel
-Bouw een **waterdichte backend** voor een modern Nederlands platform vergelijkbaar met *atleta.cc* (sportinschrijvingen & ticketverkoop).
-Het systeem moet schaalbaar, veilig (RLS-first) en auditable zijn.
+Bouw een **waterdichte backend** voor een modern Nederlands platform vergelijkbaar met *atleta.cc* (sportinschrijvingen & ticketverkoop) en cyql (Cyql is een gespecialiseerd platform dat zich specifiek richt op het organiseren en digitaliseren van wielerverenigingen en fietsgroepen).
+Het systeem moet schaalbaar, veilig (RLS-first) en auditable zijn. 
+
+###DE DATABASE IS DE SOURCE OF TRUTH.
+
+---
+
 
 ## Tech Stack
 - **Database**: Supabase Postgres
@@ -30,6 +35,7 @@ Dit project gebruikt een multi-agent development pipeline met gespecialiseerde a
 | **@supabase-tester** | Supabase DB/RLS tests | sonnet | Frontend code |
 | **@web** | Web UI (React/Vite) - **DEFAULT** | haiku | Fancy styling |
 | **@phone-ui** | Mobile UI (React Native) - *alleen op request* | sonnet | Web UI |
+| **@fixer** | Quick bug fixes, max 3 attempts | sonnet | Uitgebreide docs |
 | **@flow-keeper** | Flow tracking, dependencies | sonnet | Code schrijven |
 
 ### UI Agent Rules
@@ -51,6 +57,7 @@ Dit project gebruikt een multi-agent development pipeline met gespecialiseerde a
 - `/sprint [naam] - [beschrijving]` - Start volledige sprint pipeline (NIEUWE flow)
 - `/upgrade [flow-id] [beschrijving]` - Upgrade BESTAANDE flow met nieuwe functionaliteit
 - `/flow [F00X]` - Implementeer specifieke flow
+- `/fixer [flow-id] "[bug]"` - Quick bug fix (max 3 attempts, geen pipeline)
 - `/plan [feature]` - Plan een nieuwe feature
 - `/implement [spec]` - Implementeer volgens spec
 - `/test` - Run alle tests
@@ -74,8 +81,11 @@ Elke user journey is een "flow" met eigen directory en documentatie.
 │   ├── sprints/
 │   │   ├── s1-setup.md
 │   │   └── s2-validation.md
-│   └── tests/
-│       └── test-plan.md
+│   ├── tests/
+│   │   └── test-plan.md
+│   └── bugs/                      # Bug tracking per flow
+│       ├── index.md               # Bug overzicht
+│       └── b001-example.md        # Bug details
 │
 ├── f002-user-login/
 │   └── ...
@@ -184,6 +194,11 @@ COLOSS/
 ### Implementeer een Flow
 ```
 /flow F001
+```
+
+### Quick Bug Fix
+```
+/fixer f007-ticket-delivery "QR code laadt niet op iOS"
 ```
 
 ### Start Web Dev Server

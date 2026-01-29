@@ -1,11 +1,67 @@
+/** Font imports */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=panchang@500,700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', 'Albert Sans', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
 
 body {
   @apply bg-gray-50 text-gray-900;
+}
+
+/* COLOSS Design System Colors */
+.text-coloss-blue {
+  color: #0052ff;
+}
+
+.bg-coloss-dark {
+  background-color: #2c3446;
+}
+
+.bg-coloss-light {
+  background-color: #EDEDED;
+}
+
+.bg-coloss-gray-light {
+  background-color: #e8eaed;
+}
+
+.text-coloss-offwhite {
+  color: #f5f5f5;
+}
+
+.text-coloss-muted-gray {
+  color: #8a8f99;
+}
+
+/* Heading font */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Panchang", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.font-heading {
+  font-family: "Panchang", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Film grain noise overlay */
+@layer components {
+  .noise-overlay {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' result='noise' seed='2' /%3E%3C/filter%3E%3Crect width='400' height='400' fill='white' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+  }
 }

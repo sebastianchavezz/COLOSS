@@ -3,13 +3,13 @@
  *
  * Detail pagina voor een specifiek event met sidebar navigatie.
  * Features:
- * - Sidebar met alle event categorieën
+ * - Dark minimalist sidebar met alle event categorieën
+ * - Collapsible sidebar
  * - Full-width content area per categorie
- * - Compacte header met event info
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate, Link, NavLink, Outlet } from 'react-router-dom'
+import { useParams, useNavigate, Link, Outlet } from 'react-router-dom'
 import {
     ArrowLeft, Loader2, Trash2, CheckCircle, XCircle,
     LayoutDashboard, Ticket, ShoppingCart, Users, Route, Package,
@@ -20,6 +20,256 @@ import { clsx } from 'clsx'
 import { useOrgSafe } from '../hooks/useOrg'
 import { getEventBySlug, setEventStatus, softDeleteEvent, listEvents } from '../data/events'
 import type { AppEvent } from '../types/supabase'
+import {
+    SidebarProvider,
+    Sidebar,
+    SidebarHeader,
+    SidebarContent,
+    SidebarFooter,
+    SidebarGroup,
+    SidebarGroupLabel,
+    SidebarItem,
+    SidebarLink,
+    SidebarToggle,
+    SidebarSeparator,
+    SidebarMobileTrigger,
+    useSidebar
+} from '../components/ui/sidebar'
+
+function EventSwitcher({
+    event,
+    allEvents,
+    orgSlug
+}: {
+    event: AppEvent
+    allEvents: AppEvent[]
+    orgSlug: string
+}) {
+    const [showDropdown, setShowDropdown] = useState(false)
+    const { isCollapsed, setIsMobileOpen, isMobile } = useSidebar()
+    const navigate = useNavigate()
+
+    const handleEventSelect = (e: AppEvent) => {
+        navigate(`/org/${orgSlug}/events/${e.slug}`)
+        setShowDropdown(false)
+        if (isMobile) setIsMobileOpen(false)
+    }
+
+    if (isCollapsed) {
+        return (
+            <div className="px-2 py-3 border-b border-neutral-800">
+                <div className="flex items-center justify-center">
+                    <div className="w-10 h-10 bg-indigo-900/50 rounded-lg flex items-center justify-center">
+                        <CalendarDays className="h-5 w-5 text-indigo-400" />
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="p-3 border-b border-neutral-800 relative">
+            <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-neutral-900 transition-colors"
+            >
+                <div className="flex items-center min-w-0">
+                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-900/50 rounded-lg flex items-center justify-center">
+                        <CalendarDays className="h-5 w-5 text-indigo-400" />
+                    </div>
+                    <div className="ml-3 text-left min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{event.name}</p>
+                        <p className="text-xs text-neutral-400">
+                            {new Date(event.start_time).toLocaleDateString('nl-NL', {
+                                day: 'numeric',
+                                month: 'short'
+                            })}
+                        </p>
+                    </div>
+                </div>
+                <ChevronDown className={clsx(
+                    'h-4 w-4 text-neutral-400 transition-transform flex-shrink-0',
+                    showDropdown && 'rotate-180'
+                )} />
+            </button>
+
+            {showDropdown && (
+                <div className="absolute left-3 right-3 top-full mt-1 bg-neutral-900 border border-neutral-800 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                    <Link
+                        to={`/org/${orgSlug}/events`}
+                        className="flex items-center px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800 border-b border-neutral-800"
+                        onClick={() => {
+                            setShowDropdown(false)
+                            if (isMobile) setIsMobileOpen(false)
+                        }}
+                    >
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Alle evenementen
+                    </Link>
+                    {allEvents.map((e) => (
+                        <button
+                            key={e.id}
+                            onClick={() => handleEventSelect(e)}
+                            className={clsx(
+                                'w-full flex items-center px-3 py-2 text-sm text-left hover:bg-neutral-800',
+                                e.id === event.id && 'bg-indigo-900/30'
+                            )}
+                        >
+                            <div className="min-w-0 flex-1">
+                                <p className={clsx(
+                                    'truncate',
+                                    e.id === event.id ? 'font-medium text-indigo-400' : 'text-neutral-300'
+                                )}>
+                                    {e.name}
+                                </p>
+                                <p className="text-xs text-neutral-500">
+                                    {new Date(e.start_time).toLocaleDateString('nl-NL', {
+                                        day: 'numeric',
+                                        month: 'short'
+                                    })}
+                                </p>
+                            </div>
+                            <StatusBadge status={e.status} />
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+function EventSidebar({
+    event,
+    allEvents,
+    orgSlug,
+    eventSlug,
+    onToggleStatus,
+    onDelete,
+    actionLoading
+}: {
+    event: AppEvent
+    allEvents: AppEvent[]
+    orgSlug: string
+    eventSlug: string
+    onToggleStatus: () => void
+    onDelete: () => void
+    actionLoading: boolean
+}) {
+    const { isCollapsed } = useSidebar()
+
+    const eventNavItems = [
+        { name: 'Overzicht', href: '', icon: LayoutDashboard, end: true },
+        { name: 'Tickets', href: 'tickets', icon: Ticket },
+        { name: 'Bestellingen', href: 'orders', icon: ShoppingCart },
+        { name: 'Deelnemers', href: 'participants', icon: Users },
+        { name: 'Uitnodigingen', href: 'invitations', icon: UserPlus },
+        { name: 'Route', href: 'route', icon: Route },
+        { name: 'Producten', href: 'products', icon: Package },
+        { name: 'Communicatie', href: 'communication', icon: MessageSquare },
+        { name: 'Berichten', href: 'messaging', icon: Mail },
+        { name: 'FAQ', href: 'faq', icon: HelpCircle },
+        { name: 'Instellingen', href: 'settings', icon: Settings },
+    ]
+
+    const orgNavItems = [
+        { name: 'Team', href: `/org/${orgSlug}/team`, icon: Users },
+        { name: 'Finance', href: `/org/${orgSlug}/finance`, icon: CreditCard },
+        { name: 'Organisatie', href: `/org/${orgSlug}/settings`, icon: Building2 },
+    ]
+
+    return (
+        <Sidebar>
+            <SidebarHeader className="justify-between">
+                <Link to={`/org/${orgSlug}/events`}>
+                    {isCollapsed ? (
+                        <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                            C
+                        </div>
+                    ) : (
+                        <img src="/coloss-logo.png" alt="COLOSS" className="h-8 w-auto" />
+                    )}
+                </Link>
+                <SidebarToggle />
+            </SidebarHeader>
+
+            <EventSwitcher event={event} allEvents={allEvents} orgSlug={orgSlug} />
+
+            <SidebarContent>
+                <SidebarGroup>
+                    {eventNavItems.map((item) => {
+                        const fullPath = item.href
+                            ? `/org/${orgSlug}/events/${eventSlug}/${item.href}`
+                            : `/org/${orgSlug}/events/${eventSlug}`
+
+                        return (
+                            <SidebarItem
+                                key={item.name}
+                                icon={item.icon}
+                                label={item.name}
+                                href={fullPath}
+                                end={item.end}
+                            />
+                        )
+                    })}
+                </SidebarGroup>
+
+                <SidebarSeparator />
+
+                <SidebarGroup>
+                    <SidebarGroupLabel>Administratie</SidebarGroupLabel>
+                    {orgNavItems.map((item) => (
+                        <SidebarLink
+                            key={item.name}
+                            icon={item.icon}
+                            label={item.name}
+                            href={item.href}
+                        />
+                    ))}
+                </SidebarGroup>
+            </SidebarContent>
+
+            <SidebarFooter>
+                {!isCollapsed && (
+                    <div className="space-y-2">
+                        <button
+                            onClick={onToggleStatus}
+                            disabled={actionLoading}
+                            className={clsx(
+                                'w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                                event.status === 'published'
+                                    ? 'bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50'
+                                    : 'bg-green-900/30 text-green-400 hover:bg-green-900/50',
+                                'disabled:opacity-50'
+                            )}
+                        >
+                            {actionLoading ? (
+                                <Loader2 className="animate-spin h-4 w-4" />
+                            ) : event.status === 'published' ? (
+                                <>
+                                    <XCircle className="mr-1.5 h-4 w-4" />
+                                    Concept
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle className="mr-1.5 h-4 w-4" />
+                                    Publiceer
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={onDelete}
+                            disabled={actionLoading}
+                            className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 disabled:opacity-50"
+                        >
+                            <Trash2 className="mr-1.5 h-4 w-4" />
+                            Verwijderen
+                        </button>
+                    </div>
+                )}
+            </SidebarFooter>
+        </Sidebar>
+    )
+}
 
 export function EventDetail() {
     const { eventSlug } = useParams<{ eventSlug: string }>()
@@ -33,23 +283,18 @@ export function EventDetail() {
     const [error, setError] = useState<string | null>(null)
     const [actionLoading, setActionLoading] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-    const [showEventSwitcher, setShowEventSwitcher] = useState(false)
 
     // Fetch event data
     const fetchEvent = useCallback(async () => {
         if (!org || !eventSlug) return
 
-        console.log('[EventDetail] Fetching event:', { orgId: org.id, eventSlug })
-
         const { data, error: fetchError } = await getEventBySlug(org.id, eventSlug)
 
         if (fetchError) {
-            console.error('[EventDetail] Error:', fetchError)
             setError(fetchError.message)
         } else if (!data) {
             setError('Event niet gevonden')
         } else {
-            console.log('[EventDetail] Loaded event:', data.name)
             setEvent(data)
         }
 
@@ -77,12 +322,10 @@ export function EventDetail() {
         const newStatus = event.status === 'published' ? 'draft' : 'published'
 
         setActionLoading(true)
-        console.log('[EventDetail] Toggling status:', { from: event.status, to: newStatus })
 
         const { data, error: updateError } = await setEventStatus(event.id, newStatus)
 
         if (updateError) {
-            console.error('[EventDetail] Status update error:', updateError)
             setError(updateError.message)
         } else if (data) {
             setEvent(data)
@@ -96,16 +339,13 @@ export function EventDetail() {
         if (!event || !org) return
 
         setActionLoading(true)
-        console.log('[EventDetail] Deleting event:', event.id)
 
         const { success, error: deleteError } = await softDeleteEvent(event.id)
 
         if (deleteError) {
-            console.error('[EventDetail] Delete error:', deleteError)
             setError(deleteError.message)
             setActionLoading(false)
         } else if (success) {
-            console.log('[EventDetail] Deleted, navigating back')
             navigate(`/org/${org.slug}/events`)
         }
     }
@@ -117,7 +357,7 @@ export function EventDetail() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
+            <div className="flex items-center justify-center h-screen bg-gray-50">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
             </div>
         )
@@ -125,243 +365,72 @@ export function EventDetail() {
 
     if (error || !event) {
         return (
-            <div className="text-center py-12">
-                <h2 className="text-lg font-medium text-gray-900 mb-2">Event niet gevonden</h2>
-                <p className="text-gray-500 mb-4">{error || 'Dit event bestaat niet of is verwijderd.'}</p>
-                <Link
-                    to={`/org/${org.slug}/events`}
-                    className="inline-flex items-center text-indigo-600 hover:text-indigo-500"
-                >
-                    <ArrowLeft className="mr-1 h-4 w-4" />
-                    Terug naar evenementen
-                </Link>
+            <div className="text-center py-12 bg-gray-50 min-h-screen flex items-center justify-center">
+                <div>
+                    <h2 className="text-lg font-medium text-gray-900 mb-2">Event niet gevonden</h2>
+                    <p className="text-gray-500 mb-4">{error || 'Dit event bestaat niet of is verwijderd.'}</p>
+                    <Link
+                        to={`/org/${org.slug}/events`}
+                        className="inline-flex items-center text-indigo-600 hover:text-indigo-500"
+                    >
+                        <ArrowLeft className="mr-1 h-4 w-4" />
+                        Terug naar evenementen
+                    </Link>
+                </div>
             </div>
         )
     }
 
-
-    // Event-level navigation items
-    const eventNavItems = [
-        { name: 'Overzicht', href: '', icon: LayoutDashboard },
-        { name: 'Tickets', href: 'tickets', icon: Ticket },
-        { name: 'Bestellingen', href: 'orders', icon: ShoppingCart },
-        { name: 'Deelnemers', href: 'participants', icon: Users },
-        { name: 'Uitnodigingen', href: 'invitations', icon: UserPlus },
-        { name: 'Route', href: 'route', icon: Route },
-        { name: 'Producten', href: 'products', icon: Package },
-        { name: 'Communicatie', href: 'communication', icon: MessageSquare },
-        { name: 'Berichten', href: 'messaging', icon: Mail },
-        { name: 'FAQ', href: 'faq', icon: HelpCircle },
-        { name: 'Instellingen', href: 'settings', icon: Settings },
-    ]
-
-    // Org-level navigation items (Administratie)
-    const orgNavItems = [
-        { name: 'Team', href: `/org/${org.slug}/team`, icon: Users },
-        { name: 'Finance', href: `/org/${org.slug}/finance`, icon: CreditCard },
-        { name: 'Organisatie', href: `/org/${org.slug}/settings`, icon: Building2 },
-    ]
-
     return (
-        <div className="flex h-screen">
-            {/* Sidebar */}
-            <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-                {/* COLOSS Header */}
-                <div className="h-16 flex items-center px-4 border-b border-gray-200">
-                    <Link to={`/org/${org.slug}/events`}>
-                        <img src="/coloss-logo.png" alt="COLOSS" className="h-8 w-auto" />
-                    </Link>
-                </div>
+        <SidebarProvider>
+            <div className="flex h-screen">
+                <SidebarMobileTrigger />
 
-                {/* Event Switcher */}
-                <div className="p-3 border-b border-gray-200 relative">
-                    <button
-                        onClick={() => setShowEventSwitcher(!showEventSwitcher)}
-                        className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                        <div className="flex items-center min-w-0">
-                            <div className="flex-shrink-0 w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
-                                <CalendarDays className="h-4 w-4 text-indigo-600" />
-                            </div>
-                            <div className="ml-3 text-left min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{event.name}</p>
-                                <p className="text-xs text-gray-500">
-                                    {new Date(event.start_time).toLocaleDateString('nl-NL', {
-                                        day: 'numeric',
-                                        month: 'short'
-                                    })}
-                                </p>
-                            </div>
-                        </div>
-                        <ChevronDown className={clsx(
-                            'h-4 w-4 text-gray-400 transition-transform flex-shrink-0',
-                            showEventSwitcher && 'rotate-180'
-                        )} />
-                    </button>
+                <EventSidebar
+                    event={event}
+                    allEvents={allEvents}
+                    orgSlug={org.slug}
+                    eventSlug={eventSlug!}
+                    onToggleStatus={handleToggleStatus}
+                    onDelete={() => setShowDeleteConfirm(true)}
+                    actionLoading={actionLoading}
+                />
 
-                    {/* Event Dropdown */}
-                    {showEventSwitcher && (
-                        <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-                            <Link
-                                to={`/org/${org.slug}/events`}
-                                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 border-b border-gray-100"
-                                onClick={() => setShowEventSwitcher(false)}
-                            >
-                                <ArrowLeft className="mr-2 h-4 w-4" />
-                                Alle evenementen
-                            </Link>
-                            {allEvents.map((e) => (
+                {/* Main Content Area */}
+                <main className="flex-1 overflow-y-auto bg-gray-50">
+                    <div className="p-6 md:p-8">
+                        <Outlet context={{ event, org, refreshEvent: fetchEvent }} />
+                    </div>
+                </main>
+
+                {/* Delete Confirmation Modal */}
+                {showDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">Event verwijderen?</h3>
+                            <p className="text-sm text-gray-500 mb-4">
+                                Weet je zeker dat je "{event.name}" wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+                            </p>
+                            <div className="flex justify-end space-x-3">
                                 <button
-                                    key={e.id}
-                                    onClick={() => {
-                                        navigate(`/org/${org.slug}/events/${e.slug}`)
-                                        setShowEventSwitcher(false)
-                                    }}
-                                    className={clsx(
-                                        'w-full flex items-center px-3 py-2 text-sm text-left hover:bg-gray-50',
-                                        e.id === event.id && 'bg-indigo-50'
-                                    )}
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                                 >
-                                    <div className="min-w-0 flex-1">
-                                        <p className={clsx(
-                                            'truncate',
-                                            e.id === event.id ? 'font-medium text-indigo-700' : 'text-gray-700'
-                                        )}>
-                                            {e.name}
-                                        </p>
-                                        <p className="text-xs text-gray-500">
-                                            {new Date(e.start_time).toLocaleDateString('nl-NL', {
-                                                day: 'numeric',
-                                                month: 'short'
-                                            })}
-                                        </p>
-                                    </div>
-                                    <StatusBadge status={e.status} />
+                                    Annuleren
                                 </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Navigation */}
-                <nav className="flex-1 py-4 overflow-y-auto">
-                    {/* Event Navigation */}
-                    {eventNavItems.map((item) => {
-                        const fullPath = item.href
-                            ? `/org/${org.slug}/events/${eventSlug}/${item.href}`
-                            : `/org/${org.slug}/events/${eventSlug}`
-
-                        return (
-                            <NavLink
-                                key={item.name}
-                                to={fullPath}
-                                end={!item.href}
-                                className={({ isActive }) => clsx(
-                                    'flex items-center px-4 py-2.5 text-sm font-medium transition-colors',
-                                    isActive
-                                        ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-600'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                                )}
-                            >
-                                <item.icon className="mr-3 h-5 w-5" />
-                                {item.name}
-                            </NavLink>
-                        )
-                    })}
-
-                    {/* Separator */}
-                    <div className="my-4 mx-4 border-t border-gray-200" />
-
-                    {/* Administratie Section */}
-                    <div className="px-4 mb-2">
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            Administratie
-                        </span>
-                    </div>
-                    {orgNavItems.map((item) => (
-                        <Link
-                            key={item.name}
-                            to={item.href}
-                            className="flex items-center px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-                        >
-                            <item.icon className="mr-3 h-5 w-5" />
-                            {item.name}
-                        </Link>
-                    ))}
-                </nav>
-
-                {/* Actions at bottom */}
-                <div className="p-4 border-t border-gray-200 space-y-2">
-                    <button
-                        onClick={handleToggleStatus}
-                        disabled={actionLoading}
-                        className={clsx(
-                            'w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
-                            event.status === 'published'
-                                ? 'border border-yellow-300 text-yellow-700 bg-yellow-50 hover:bg-yellow-100'
-                                : 'border border-green-300 text-green-700 bg-green-50 hover:bg-green-100',
-                            'disabled:opacity-50'
-                        )}
-                    >
-                        {actionLoading ? (
-                            <Loader2 className="animate-spin h-4 w-4" />
-                        ) : event.status === 'published' ? (
-                            <>
-                                <XCircle className="mr-1.5 h-4 w-4" />
-                                Concept
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle className="mr-1.5 h-4 w-4" />
-                                Publiceer
-                            </>
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setShowDeleteConfirm(true)}
-                        disabled={actionLoading}
-                        className="w-full flex items-center justify-center px-3 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
-                    >
-                        <Trash2 className="mr-1.5 h-4 w-4" />
-                        Verwijderen
-                    </button>
-                </div>
-            </aside>
-
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto bg-gray-50">
-                <div className="p-6">
-                    <Outlet context={{ event, org, refreshEvent: fetchEvent }} />
-                </div>
-            </main>
-
-            {/* Delete Confirmation Modal */}
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">Event verwijderen?</h3>
-                        <p className="text-sm text-gray-500 mb-4">
-                            Weet je zeker dat je "{event.name}" wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
-                        </p>
-                        <div className="flex justify-end space-x-3">
-                            <button
-                                onClick={() => setShowDeleteConfirm(false)}
-                                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                            >
-                                Annuleren
-                            </button>
-                            <button
-                                onClick={handleDelete}
-                                disabled={actionLoading}
-                                className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
-                            >
-                                {actionLoading ? 'Verwijderen...' : 'Verwijderen'}
-                            </button>
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={actionLoading}
+                                    className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                                >
+                                    {actionLoading ? 'Verwijderen...' : 'Verwijderen'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )}
+            </div>
+        </SidebarProvider>
     )
 }
 
@@ -370,16 +439,16 @@ export function EventDetail() {
  */
 function StatusBadge({ status }: { status: string }) {
     const config = {
-        draft: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Concept' },
-        published: { bg: 'bg-green-100', text: 'text-green-800', label: 'Gepubliceerd' },
-        closed: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Gesloten' },
+        draft: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', label: 'Concept' },
+        published: { bg: 'bg-green-900/30', text: 'text-green-400', label: 'Live' },
+        closed: { bg: 'bg-neutral-700', text: 'text-neutral-300', label: 'Gesloten' },
     }
 
     const { bg, text, label } = config[status as keyof typeof config] || config.draft
 
     return (
         <span className={clsx(
-            'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+            'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
             bg, text
         )}>
             {label}
@@ -400,7 +469,7 @@ export function EventOverview() {
             </p>
             <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3">
                 {['Inschrijvingen', 'Omzet', 'Tickets verkocht'].map((stat) => (
-                    <div key={stat} className="bg-gray-50 rounded-lg px-4 py-5 text-center">
+                    <div key={stat} className="bg-white rounded-lg px-4 py-5 text-center shadow-sm border border-gray-200">
                         <p className="text-sm font-medium text-gray-500">{stat}</p>
                         <p className="mt-1 text-3xl font-semibold text-gray-900">–</p>
                     </div>
@@ -409,8 +478,6 @@ export function EventOverview() {
         </div>
     )
 }
-
-// Note: EventTickets is now in its own file: src/pages/EventTickets.tsx
 
 export function EventProducts() {
     return (

@@ -49,14 +49,36 @@ import { EventRoute } from './pages/public/EventRoute'
 import { EventInvitations } from './pages/EventInvitations'
 import { PublicInvite } from './pages/public/PublicInvite'
 import { TeamPage } from './pages/TeamPage'
+import { Homepage } from './pages/Homepage'
+import { ComingSoon } from './pages/ComingSoon'
+
+// Set to true to enable "Coming Soon" mode for deployment
+const COMING_SOON_MODE = true
 
 function App() {
+  // Coming Soon Mode - only homepage and coming-soon page work
+  if (COMING_SOON_MODE) {
+    return (
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Homepage />} />
+            <Route path="/coming-soon" element={<ComingSoon />} />
+            {/* All other routes go to Coming Soon */}
+            <Route path="*" element={<ComingSoon />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    )
+  }
+
   return (
     <AuthProvider>
       <AuthDebug />
       <BrowserRouter>
         <Routes>
           {/* Public routes */}
+          <Route path="/" element={<Homepage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -85,8 +107,8 @@ function App() {
             <Route path="/events/:eventId/transfers" element={<Transfers />} />
             <Route path="/events/:eventId/route" element={<EventRouteAdmin />} />
 
-            {/* Redirect root naar default org */}
-            <Route path="/" element={<Navigate to="/org/demo/events" replace />} />
+            {/* Redirect /dashboard naar default org */}
+            <Route path="/dashboard" element={<Navigate to="/org/demo/events" replace />} />
 
             {/* Org-scoped routes (protected by Layout) */}
             <Route path="/org/:orgSlug" element={<Layout><Outlet /></Layout>}>

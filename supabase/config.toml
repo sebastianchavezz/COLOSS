@@ -9,3 +9,9 @@ entrypoint = "./functions/bootstrap-org/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/bootstrap-org/*.html" ]
+
+# Process GPX - handles auth manually in function code
+[functions.process-gpx]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/process-gpx/index.ts"

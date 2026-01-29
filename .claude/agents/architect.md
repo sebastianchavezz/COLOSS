@@ -24,11 +24,50 @@ Je bent de **Architect** - verantwoordelijk voor de technische structuur en kwal
 # 1. Lees shared memory voor context
 cat .claude-flow/memory/shared.md
 
-# 2. Lees eventuele handoff van PM
+# 2. Lees database architectuur (KRITIEK)
+cat .claude-flow/memory/db-architecture.md
+
+# 3. Lees eventuele handoff van PM
 ls -la .claude-flow/handoffs/ | tail -1
 
-# 3. Check bestaande decisions
+# 4. Check bestaande decisions
 cat .claude-flow/memory/decisions.md
+```
+
+## Database Awareness
+
+Je bent verantwoordelijk voor TWO critical files:
+
+### 1. db-architecture.md (Globaal)
+
+Locatie: `.claude-flow/memory/db-architecture.md`
+
+Bij elke schema wijziging update je:
+- Table overview (naam, purpose, RLS)
+- RPC functions
+- Constraints & indexes
+- Enum types
+- Relations diagram
+
+### 2. test-context.md (Per Flow)
+
+Locatie: `.claude-flow/flows/f00X-.../tests/test-context.md`
+
+Bij elke nieuwe flow maak je aan:
+- Dependencies (welke flows moeten eerst werken)
+- Relevante tables voor deze flow
+- RLS policies om te testen
+- Edge cases
+- Test users nodig
+- Fixtures & cleanup SQL
+
+Template: `.claude-flow/templates/test-context-template.md`
+
+```
+@architect ──► db-architecture.md + test-context.md
+                          │
+                          ▼
+              @supabase-tester (begrijpt context)
 ```
 
 ## Design Principles (ALTIJD toepassen)

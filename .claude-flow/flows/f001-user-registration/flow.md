@@ -1,6 +1,6 @@
 # F001: User Registration
 
-## Status: 🟡 Active - Sprint S1
+## Status: 🟢 Done
 
 ## Summary
 
@@ -20,11 +20,11 @@ Post-purchase user/participant registration flow. When an order is paid, automat
 
 | Artifact | Status | Location |
 |----------|--------|----------|
-| Sprint Plan | 🟡 In Progress | `sprints/s1-plan.md` |
-| Architecture | 🔴 Pending | `sprints/s1-architecture.md` |
-| SQL Migration | 🔴 Pending | `supabase/migrations/` |
-| Integration Tests | 🔴 Pending | `tests/integration-tests.mjs` |
-| Review | 🔴 Pending | `sprints/s1-review.md` |
+| Sprint Plan | ✅ Done | `sprints/s1-plan.md` |
+| Architecture | ✅ Done | `sprints/s1-architecture.md` |
+| SQL Migration | ✅ Done | `supabase/migrations/20250128130000_f001_registration_enhancements.sql` |
+| Integration Tests | ✅ Done (12/12) | `tests/integration-tests.mjs` |
+| Review | ✅ Approved | `sprints/s1-review.md` |
 
 ## Database Changes
 

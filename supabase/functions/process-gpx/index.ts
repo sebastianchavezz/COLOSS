@@ -213,33 +213,53 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseUrl || !supabaseServiceKey || !anonKey) {
       throw new Error("Missing environment variables");
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Service role client for DB operations (bypasses RLS)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
-    // Verify auth
+    // Verify auth - get token from header
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "UNAUTHORIZED" }), {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("No Authorization header or invalid format");
+      return new Response(JSON.stringify({ error: "UNAUTHORIZED", message: "Missing Authorization header" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    console.log("Auth header received");
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "UNAUTHORIZED" }), {
+    // Create client with user's token to verify (same pattern as create-order-public)
+    let user: { id: string } | null = null;
+    try {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data } = await userClient.auth.getUser();
+      user = data.user;
+    } catch (e) {
+      console.error("Auth verification failed:", e);
+    }
+
+    if (!user) {
+      console.error("No user found for token");
+      return new Response(JSON.stringify({ error: "UNAUTHORIZED", message: "Invalid or expired token" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("User verified:", user.id);
 
     // Parse request body
     const { event_id, gpx_content, name } = await req.json();
@@ -332,22 +352,37 @@ serve(async (req) => {
       // Continue without file storage - route data is stored in DB
     }
 
-    // Save route using RPC
-    const { data: saveResult, error: saveError } = await supabase.rpc("save_event_route", {
-      _event_id: event_id,
-      _name: name || "Route",
-      _route_geometry: processed.geometry,
-      _bounds: processed.bounds,
-      _distance_m: processed.distance_m,
-      _point_count: processed.point_count,
-      _gpx_file_path: uploadError ? null : filePath,
-    });
+    // Soft delete existing route first
+    await supabase
+      .from("event_routes")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("event_id", event_id)
+      .is("deleted_at", null);
 
-    if (saveError || saveResult?.error) {
+    // Insert new route directly (service role bypasses RLS)
+    const { data: savedRoute, error: saveError } = await supabase
+      .from("event_routes")
+      .insert({
+        org_id: event.org_id,
+        event_id: event_id,
+        name: name || "Route",
+        gpx_file_path: uploadError ? null : filePath,
+        route_geometry: processed.geometry,
+        bounds: processed.bounds,
+        distance_m: processed.distance_m,
+        point_count: processed.point_count,
+        status: "draft",
+        updated_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (saveError) {
+      console.error("Save route error:", saveError);
       return new Response(
         JSON.stringify({
           error: "SAVE_FAILED",
-          details: saveError?.message || saveResult?.error,
+          details: saveError.message,
         }),
         {
           status: 500,
@@ -356,23 +391,48 @@ serve(async (req) => {
       );
     }
 
-    // Get the saved route
-    const { data: routeResult } = await supabase.rpc("get_event_route", {
-      _event_id: event_id,
-    });
+    // Audit log (non-blocking) - table has BOTH resource_type/resource_id AND entity_type as NOT NULL
+    try {
+      await supabase
+        .from("audit_log")
+        .insert({
+          org_id: event.org_id,
+          user_id: user.id,
+          action: "route_created",
+          resource_type: "event_route",
+          resource_id: savedRoute.id,
+          entity_type: "event_route",
+          entity_id: savedRoute.id,
+          details: {
+            event_id: event_id,
+            distance_m: processed.distance_m,
+            point_count: processed.point_count,
+          },
+          metadata: {
+            event_id: event_id,
+            distance_m: processed.distance_m,
+            point_count: processed.point_count,
+          },
+        });
+    } catch (e) {
+      console.error("Audit log error:", e);
+    }
 
     return new Response(
       JSON.stringify({
         status: "OK",
-        route: routeResult?.route || {
-          route_id: saveResult?.route_id,
-          event_id,
-          name: name || "Route",
-          status: "draft",
-          route_geometry: processed.geometry,
-          bounds: processed.bounds,
-          distance_m: processed.distance_m,
-          point_count: processed.point_count,
+        route: {
+          id: savedRoute.id,
+          event_id: savedRoute.event_id,
+          name: savedRoute.name,
+          status: savedRoute.status,
+          route_geometry: savedRoute.route_geometry,
+          bounds: savedRoute.bounds,
+          distance_m: savedRoute.distance_m,
+          point_count: savedRoute.point_count,
+          gpx_file_path: savedRoute.gpx_file_path,
+          created_at: savedRoute.created_at,
+          updated_at: savedRoute.updated_at,
         },
         processing: {
           original_points: originalPointCount,

@@ -1,9 +1,20 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { Link, useParams, useLocation, Outlet } from 'react-router-dom'
 import { Calendar, Settings, Users, CreditCard, LayoutDashboard } from 'lucide-react'
-import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import type { Organization } from '../types/supabase'
+import {
+    SidebarProvider,
+    Sidebar,
+    SidebarHeader,
+    SidebarContent,
+    SidebarFooter,
+    SidebarGroup,
+    SidebarItem,
+    SidebarToggle,
+    SidebarMobileTrigger,
+    useSidebar
+} from './ui/sidebar'
 
 /**
  * Layout State Machine:
@@ -14,6 +25,64 @@ import type { Organization } from '../types/supabase'
  * - 'error': Something went wrong
  */
 type LayoutState = 'loading' | 'needsLogin' | 'needsBootstrap' | 'ready' | 'error'
+
+function SidebarLogo() {
+    const { isCollapsed } = useSidebar()
+    const { orgSlug } = useParams<{ orgSlug: string }>()
+
+    return (
+        <Link to={`/org/${orgSlug}`} className="flex items-center">
+            {isCollapsed ? (
+                <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                    C
+                </div>
+            ) : (
+                <img src="/coloss-logo.png" alt="COLOSS" className="h-8 w-auto" />
+            )}
+        </Link>
+    )
+}
+
+function OrgSidebar({ orgSlug }: { orgSlug: string }) {
+    const navItems = [
+        { name: 'Dashboard', href: `/org/${orgSlug}`, icon: LayoutDashboard, end: true },
+        { name: 'Events', href: `/org/${orgSlug}/events`, icon: Calendar },
+        { name: 'Team', href: `/org/${orgSlug}/team`, icon: Users },
+        { name: 'Finance', href: `/org/${orgSlug}/finance`, icon: CreditCard },
+        { name: 'Settings', href: `/org/${orgSlug}/settings`, icon: Settings },
+    ]
+
+    return (
+        <Sidebar>
+            <SidebarHeader className="justify-between">
+                <SidebarLogo />
+                <SidebarToggle />
+            </SidebarHeader>
+
+            <SidebarContent>
+                <SidebarGroup>
+                    {navItems.map((item) => (
+                        <SidebarItem
+                            key={item.name}
+                            icon={item.icon}
+                            label={item.name}
+                            href={item.href}
+                            end={item.end}
+                        />
+                    ))}
+                </SidebarGroup>
+            </SidebarContent>
+
+            <SidebarFooter>
+                <div className="flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-full bg-neutral-800 flex items-center justify-center">
+                        <Users className="h-4 w-4 text-neutral-400" />
+                    </div>
+                </div>
+            </SidebarFooter>
+        </Sidebar>
+    )
+}
 
 export function Layout({ children }: { children?: React.ReactNode }) {
     const { orgSlug } = useParams<{ orgSlug: string }>()
@@ -34,8 +103,6 @@ export function Layout({ children }: { children?: React.ReactNode }) {
      * 1. Check auth
      * 2. Fetch org
      * 3. Transition to appropriate state
-     * 
-     * IMPORTANT: Timeout is only diagnostic. It clears automatically on ANY state transition.
      */
     useEffect(() => {
         const currentRequestId = ++fetchRequestId.current
@@ -47,7 +114,6 @@ export function Layout({ children }: { children?: React.ReactNode }) {
             currentState: state
         })
 
-        // Helper: Clear timeout and log transition
         const transitionTo = (newState: LayoutState, msg?: string) => {
             if (loadingTimeout.current) {
                 clearTimeout(loadingTimeout.current)
@@ -58,18 +124,10 @@ export function Layout({ children }: { children?: React.ReactNode }) {
             setState(newState)
         }
 
-        // Set a diagnostic timeout (should NEVER fire if logic is correct)
-        // Only start if we're actually in loading state
         if (state === 'loading') {
             loadingTimeout.current = setTimeout(() => {
                 if (!cancelled && state === 'loading') {
-                    console.error(`[${currentRequestId}] ⚠️  DIAGNOSTIC TIMEOUT after 30s`, {
-                        orgSlug,
-                        currentState: state,
-                        requestId: currentRequestId,
-                        latestRequestId: fetchRequestId.current,
-                        message: 'This should never happen if state transitions are working correctly'
-                    })
+                    console.error(`[${currentRequestId}] ⚠️  DIAGNOSTIC TIMEOUT after 30s`)
                     transitionTo('error')
                     setErrorMessage('Timeout: initialize() hung. Check console for details.')
                 }
@@ -78,122 +136,50 @@ export function Layout({ children }: { children?: React.ReactNode }) {
 
         async function initialize() {
             try {
-                // =====================
-                // STEP 1: CHECK AUTH - STRICT REQUIREMENT
-                // =====================
-                const authStart = performance.now()
-                console.log(`[${currentRequestId}] Step 1: Checking auth...`)
-
                 const { data: { session }, error: authError } = await supabase.auth.getSession()
-                const authDuration = Math.round(performance.now() - authStart)
 
-                if (authDuration > 2000) {
-                    console.warn(`[${currentRequestId}] ⚠️  Auth check slow: ${authDuration}ms`)
-                }
-
-                console.log(`[${currentRequestId}] Auth result (${authDuration}ms):`, {
-                    hasSession: !!session,
-                    userId: session?.user?.id,
-                    hasAccessToken: !!session?.access_token,
-                    tokenStart: session?.access_token?.slice(0, 20),
-                    error: authError?.message
-                })
-
-                // Guard: Check if this request is stale
-                if (cancelled || currentRequestId !== fetchRequestId.current) {
-                    console.log(`[${currentRequestId}] Cancelled or stale, aborting`)
-                    return
-                }
+                if (cancelled || currentRequestId !== fetchRequestId.current) return
 
                 if (authError) {
-                    console.error(`[${currentRequestId}] Auth error:`, authError)
                     transitionTo('error')
                     setErrorMessage(`Auth error: ${authError.message}`)
                     return
                 }
 
-                // STRICT: No session = no access to org features
                 if (!session || !session.access_token) {
-                    console.log(`[${currentRequestId}] ❌ No valid session, MUST login`)
                     transitionTo('needsLogin')
                     return
                 }
 
-                console.log(`[${currentRequestId}] ✅ Valid session found`)
-
-                // =====================
-                // STEP 2: VALIDATE SLUG
-                // =====================
                 if (!orgSlug) {
-                    console.error(`[${currentRequestId}] No orgSlug in URL`)
                     transitionTo('error')
                     setErrorMessage('Geen organisatie slug in URL')
                     return
                 }
 
-                // =====================
-                // STEP 3: FETCH ORG (auth required)
-                // =====================
-                const fetchStart = performance.now()
-                console.log(`[${currentRequestId}] Step 2: Fetching org "${orgSlug}" (authenticated)...`)
-
-                const { data, error, status } = await supabase
+                const { data, error } = await supabase
                     .from('orgs')
                     .select('*')
                     .eq('slug', orgSlug)
                     .maybeSingle()
 
-                const fetchDuration = Math.round(performance.now() - fetchStart)
+                if (cancelled || currentRequestId !== fetchRequestId.current) return
 
-                if (fetchDuration > 2000) {
-                    console.warn(`[${currentRequestId}] ⚠️  Org fetch slow: ${fetchDuration}ms`, {
-                        status,
-                        error: error?.code
-                    })
-                }
-
-                console.log(`[${currentRequestId}] Org fetch result (${fetchDuration}ms):`, {
-                    hasData: !!data,
-                    error: error?.message,
-                    code: error?.code,
-                    status,
-                    data: data ? { id: data.id, name: data.name } : null
-                })
-
-                // Guard: Check if this request is stale
-                if (cancelled || currentRequestId !== fetchRequestId.current) {
-                    console.log(`[${currentRequestId}] Cancelled or stale after fetch, aborting`)
-                    return
-                }
-
-                // Handle fetch error
                 if (error) {
-                    console.error(`[${currentRequestId}] Fetch error:`, error)
                     transitionTo('error')
                     setErrorMessage(`Database error: ${error.message}`)
                     return
                 }
 
-                // =====================
-                // STEP 4: TRANSITION (session guaranteed at this point)
-                // =====================
                 if (data) {
-                    console.log(`[${currentRequestId}] ✅ Org found: "${data.name}"`)
                     setOrg(data)
                     transitionTo('ready')
                 } else {
-                    console.log(`[${currentRequestId}] ℹ️  Org "${orgSlug}" not found, can bootstrap`)
                     transitionTo('needsBootstrap')
                 }
 
             } catch (err: any) {
-                // Guard: Only process if not cancelled/stale
-                if (cancelled || currentRequestId !== fetchRequestId.current) {
-                    console.log(`[${currentRequestId}] Exception in cancelled request, ignoring`)
-                    return
-                }
-
-                console.error(`[${currentRequestId}] Unexpected error in init:`, err)
+                if (cancelled || currentRequestId !== fetchRequestId.current) return
                 transitionTo('error')
                 setErrorMessage(err.message ?? 'Onbekende fout')
             }
@@ -202,97 +188,46 @@ export function Layout({ children }: { children?: React.ReactNode }) {
         initialize()
 
         return () => {
-            console.log(`[${currentRequestId}] Cleanup`)
             cancelled = true
             if (loadingTimeout.current) {
                 clearTimeout(loadingTimeout.current)
                 loadingTimeout.current = null
             }
         }
-    }, [orgSlug]) // Only re-run when orgSlug changes
+    }, [orgSlug])
 
-    /**
-     * Bootstrap handler - creates org via Edge Function.
-     */
     const handleBootstrap = useCallback(async () => {
-        if (bootstrapInProgress.current) {
-            console.log('[Layout] Bootstrap already in progress')
-            return
-        }
+        if (bootstrapInProgress.current) return
 
         bootstrapInProgress.current = true
         setState('loading')
         setErrorMessage(null)
 
         try {
-            // STRICT: Verify we have a valid auth session BEFORE invoking
             const { data: { session } } = await supabase.auth.getSession()
 
-            console.log('[Layout] 🔍 Bootstrap session check:', {
-                hasSession: !!session,
-                userId: session?.user?.id,
-                hasAccessToken: !!session?.access_token,
-                tokenStart: session?.access_token?.slice(0, 20) + '...',
-            })
-
-            // HARD GUARD: No token = cannot invoke function
             if (!session || !session.access_token) {
-                console.error('[Layout] ❌ GUARD: No access token, cannot invoke function')
                 setState('needsLogin')
                 setErrorMessage('Sessie verlopen of ongeldig. Log opnieuw in.')
                 return
             }
 
-            console.log('[Layout] ✅ Access token verified, proceeding with invoke')
-
-            // ============================================================
-            // DEBUG: Verify token + project match before invoke
-            // ============================================================
-            const token = session.access_token
-            console.log('[Layout] 🔐 Token debug:', {
-                tokenLength: token.length,
-                tokenStart: token.slice(0, 30),
-                tokenEnd: token.slice(-10),
-                projectUrl: import.meta.env.VITE_SUPABASE_URL,
-            })
-
-            // Cross-check: does getUser work with this token?
             const { data: { user }, error: userError } = await supabase.auth.getUser()
-            console.log('[Layout] 👤 getUser verification:', {
-                userId: user?.id,
-                email: user?.email,
-                error: userError?.message,
-            })
 
             if (userError || !user) {
-                console.error('[Layout] ❌ getUser failed, token may be invalid')
                 setState('needsLogin')
                 setErrorMessage('Token verificatie mislukt. Log opnieuw in.')
                 return
             }
 
-            const payload = { slug: orgSlug ?? 'demo', name: 'Demo Organisatie' }
-            console.log('[Layout] 🚀 Invoking bootstrap-org:', {
-                ...payload,
-                targetUrl: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bootstrap-org`,
-            })
-
             const { data, error: fnError } = await supabase.functions.invoke('bootstrap-org', {
-                body: payload
+                body: { slug: orgSlug ?? 'demo', name: 'Demo Organisatie' }
             })
 
-            console.log('[Layout] 📥 Bootstrap response:', { data, fnError })
-
-            if (fnError) {
-                throw new Error(fnError.message ?? 'Function invoke failed')
-            }
-
-            if (data?.error) {
-                throw new Error(data.error)
-            }
+            if (fnError) throw new Error(fnError.message ?? 'Function invoke failed')
+            if (data?.error) throw new Error(data.error)
 
             if (data?.org) {
-                console.log('[Layout] ✅ Org bootstrapped:', data.org)
                 setOrg(data.org)
                 setState('ready')
             } else {
@@ -300,7 +235,6 @@ export function Layout({ children }: { children?: React.ReactNode }) {
             }
 
         } catch (err: any) {
-            console.error('[Layout] ❌ Bootstrap error:', err)
             setState('error')
             setErrorMessage(`Fout: ${err.message}`)
         } finally {
@@ -311,8 +245,6 @@ export function Layout({ children }: { children?: React.ReactNode }) {
     // ========================================
     // RENDER BASED ON STATE
     // ========================================
-
-    console.log('[Layout] Rendering state:', state)
 
     if (state === 'loading') {
         return (
@@ -383,12 +315,10 @@ export function Layout({ children }: { children?: React.ReactNode }) {
 
     // state === 'ready'
     if (!org) {
-        console.error('[Layout] State is ready but org is null!')
         return <div className="p-8 text-red-600">Inconsistent state: ready but no org</div>
     }
 
-    // Check if we're on an event detail page (has eventSlug in path)
-    // Pattern: /org/:orgSlug/events/:eventSlug/...
+    // Check if we're on an event detail page
     const eventDetailMatch = location.pathname.match(/^\/org\/[^/]+\/events\/([^/]+)/)
     const isEventDetailPage = eventDetailMatch && eventDetailMatch[1] !== 'new'
 
@@ -402,56 +332,26 @@ export function Layout({ children }: { children?: React.ReactNode }) {
         )
     }
 
-    const navItems = [
-        { name: 'Dashboard', href: `/org/${orgSlug}`, icon: LayoutDashboard },
-        { name: 'Events', href: `/org/${orgSlug}/events`, icon: Calendar },
-        { name: 'Team', href: `/org/${orgSlug}/team`, icon: Users },
-        { name: 'Finance', href: `/org/${orgSlug}/finance`, icon: CreditCard },
-        { name: 'Settings', href: `/org/${orgSlug}/settings`, icon: Settings },
-    ]
-
     return (
-        <div className="min-h-screen bg-gray-50 flex">
-            {/* Sidebar */}
-            <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-                <div className="h-16 flex items-center px-6 border-b border-gray-200">
-                    <div className="text-2xl font-bold text-indigo-600">COLOSS</div>
-                </div>
-                <nav className="flex-1 p-4 space-y-1">
-                    {navItems.map((item) => {
-                        const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
-                        return (
-                            <Link
-                                key={item.name}
-                                to={item.href}
-                                className={clsx(
-                                    'flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors',
-                                    isActive
-                                        ? 'bg-indigo-50 text-indigo-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
-                                )}
-                            >
-                                <item.icon className="mr-3 h-5 w-5" />
-                                {item.name}
-                            </Link>
-                        )
-                    })}
-                </nav>
-            </div>
+        <SidebarProvider>
+            <div className="min-h-screen bg-gray-50 flex">
+                <SidebarMobileTrigger />
+                <OrgSidebar orgSlug={orgSlug!} />
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col">
-                <header className="h-16 bg-white border-b border-gray-200 px-8 flex items-center justify-between">
-                    <h1 className="text-lg font-medium text-gray-900">{org.name}</h1>
-                    <div className="flex items-center space-x-4">
-                        <div className="h-8 w-8 rounded-full bg-gray-200" />
-                    </div>
-                </header>
-                <main className="flex-1 p-8 overflow-auto">
-                    {children}
-                    <Outlet context={{ org }} />
-                </main>
+                {/* Main Content */}
+                <div className="flex-1 flex flex-col min-w-0">
+                    <header className="h-16 bg-white border-b border-gray-200 px-8 flex items-center justify-between flex-shrink-0">
+                        <h1 className="text-lg font-medium text-gray-900">{org.name}</h1>
+                        <div className="flex items-center space-x-4">
+                            <div className="h-8 w-8 rounded-full bg-gray-200" />
+                        </div>
+                    </header>
+                    <main className="flex-1 p-8 overflow-auto">
+                        {children}
+                        <Outlet context={{ org }} />
+                    </main>
+                </div>
             </div>
-        </div>
+        </SidebarProvider>
     )
 }
