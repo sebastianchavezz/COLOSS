@@ -1,17 +1,17 @@
 /**
  * send-message Edge Function
  *
- * Allows authenticated participants or organizers to send messages within
- * a chat thread. Participants can create threads implicitly (via event_id);
- * organizers must reply to existing threads (thread_id required).
+ * Allows authenticated users to send messages within a chat thread.
+ * ANY logged-in user can start a chat (pre-purchase questions allowed).
+ * Organizers must reply to existing threads (thread_id required).
  *
  * Flow:
  * 1. Authenticate user (guests cannot message)
  * 2. Parse body: { thread_id?, event_id, content }
  * 3. Determine role: participant vs organizer
- * 4. If PARTICIPANT:
- *    a. Validate event access (registration or ticket)
- *    b. Get or create thread
+ * 4. If PARTICIPANT (or new user):
+ *    a. Auto-create participant record if needed
+ *    b. Get or create thread (tracks participant_has_access for organizer UI)
  *    c. Enforce content length and rate limits from messaging settings
  *    d. Verify thread is not closed
  *    e. Insert message (sender_type = 'participant')
@@ -30,6 +30,11 @@
  *    - Uses SERVICE_ROLE for all DB operations (server-side trust boundary)
  *    - Rate limiting enforced for participants only
  *    - Profanity placeholder flags content for moderation review
+ *
+ * NOTE: S3 Upgrade - Open Chat Access
+ *    - Removed ticket/registration requirement for chat
+ *    - Any logged-in user can start a conversation
+ *    - participant_has_access tracked for organizer context badge
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -176,20 +181,48 @@ serve(async (req: Request) => {
             }
         }
 
-        // If neither participant nor organizer, deny access
+        // S3 UPGRADE: Auto-create participant if user is not participant and not organizer
+        // This allows ANY logged-in user to start a chat (pre-purchase questions)
+        let actualParticipant = participant
+        let actualIsParticipant = isParticipant
+
         if (!isParticipant && !isOrganizer) {
-            logger.warn('User is neither participant nor organizer', { userId: user.id })
-            return errorResponse('Forbidden: no participant or organizer role found', 'FORBIDDEN', 403)
+            logger.info('User has no participant record, auto-creating', { userId: user.id })
+
+            // Use RPC to get or create participant
+            const { data: newParticipantId, error: createError } = await supabaseAdmin
+                .rpc('get_or_create_participant_for_user', { _user_id: user.id })
+
+            if (createError || !newParticipantId) {
+                logger.error('Failed to auto-create participant', { error: createError?.message })
+                return errorResponse('Failed to create participant record', 'PARTICIPANT_CREATE_ERROR', 500, createError?.message)
+            }
+
+            // Fetch the new participant record
+            const { data: newParticipant } = await supabaseAdmin
+                .from('participants')
+                .select('id, user_id, email, first_name, last_name')
+                .eq('id', newParticipantId)
+                .single()
+
+            if (newParticipant) {
+                actualParticipant = newParticipant
+                actualIsParticipant = true
+                logger.info('Participant auto-created', { participantId: newParticipantId })
+            } else {
+                logger.error('Failed to fetch newly created participant')
+                return errorResponse('Failed to fetch participant record', 'PARTICIPANT_FETCH_ERROR', 500)
+            }
         }
 
         // Dual-role resolution:
         // If user is BOTH participant and organizer:
         //   - thread_id provided -> organizer path (replying to a specific thread)
         //   - no thread_id       -> participant path (continuing own thread)
-        const effectiveIsParticipant = isParticipant && !(isOrganizer && thread_id)
-        const effectiveIsOrganizer = isOrganizer && (!isParticipant || !!thread_id)
+        const effectiveIsParticipant = actualIsParticipant && !(isOrganizer && thread_id)
+        const effectiveIsOrganizer = isOrganizer && (!actualIsParticipant || !!thread_id)
 
-        logger.info('Role determined', { isParticipant, isOrganizer, effectiveIsParticipant, effectiveIsOrganizer })
+        logger.info('Role determined', { isParticipant: actualIsParticipant, isOrganizer, effectiveIsParticipant, effectiveIsOrganizer })
 
         // =================================================================
         // 4. PARTICIPANT FLOW
@@ -200,28 +233,18 @@ serve(async (req: Request) => {
                 return errorResponse('event_id is required for participant messages', 'MISSING_EVENT_ID', 400)
             }
 
-            const participantId = participant!.id
+            const participantId = actualParticipant!.id
 
-            // 4a. Validate participant has access to this event
-            const { data: hasAccess, error: accessError } = await supabaseAdmin
+            // 4a. Check participant event access (for tracking, NOT blocking)
+            // S3 UPGRADE: We no longer block users without tickets - just track for organizer UI
+            const { data: hasAccess } = await supabaseAdmin
                 .rpc('check_participant_event_access', {
                     _event_id: event_id,
                     _participant_id: participantId
                 })
 
-            if (accessError) {
-                logger.error('Access check RPC failed', { error: accessError.message })
-                return errorResponse('Access validation failed', 'ACCESS_CHECK_ERROR', 500, accessError.message)
-            }
-
-            if (!hasAccess) {
-                logger.warn('Participant has no valid registration or ticket', { participantId, eventId: event_id })
-                return errorResponse(
-                    'No valid registration or ticket for this event',
-                    'FORBIDDEN',
-                    403
-                )
-            }
+            const participantHasAccess = !!hasAccess
+            logger.info('Participant access status', { participantId, eventId: event_id, hasAccess: participantHasAccess })
 
             // 4b. Get or create thread
             const { data: resolvedThreadId, error: threadError } = await supabaseAdmin
@@ -238,7 +261,14 @@ serve(async (req: Request) => {
             const activeThreadId = resolvedThreadId as string
             logger.info('Thread resolved', { threadId: activeThreadId })
 
-            // 4c. Get messaging settings for this event
+            // 4c. Update thread with participant access status (for organizer UI badge)
+            await supabaseAdmin
+                .from('chat_threads')
+                .update({ participant_has_access: participantHasAccess })
+                .eq('id', activeThreadId)
+                .catch((err) => logger.warn('Failed to update participant_has_access', { error: err.message }))
+
+            // 4d. Get messaging settings for this event
             const { data: settings, error: settingsError } = await supabaseAdmin
                 .rpc('get_messaging_settings', { _event_id: event_id })
 

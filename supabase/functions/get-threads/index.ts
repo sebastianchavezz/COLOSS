@@ -48,6 +48,7 @@ interface ChatThreadRow {
     last_message_at: string | null
     created_at: string
     updated_at: string
+    participant_has_access: boolean | null  // S3: Track if participant has ticket/registration
 }
 
 // Participant info joined onto thread
@@ -170,7 +171,7 @@ serve(async (req: Request) => {
         // Build the threads query
         let threadsQuery = supabaseAdmin
             .from('chat_threads')
-            .select('id, org_id, event_id, participant_id, status, unread_count_organizer, last_message_at, created_at, updated_at')
+            .select('id, org_id, event_id, participant_id, status, unread_count_organizer, last_message_at, created_at, updated_at, participant_has_access')
             .eq('event_id', eventId)
             .eq('org_id', orgId)
 
