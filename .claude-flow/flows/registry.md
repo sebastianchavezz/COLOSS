@@ -16,7 +16,7 @@
 | F007 | Ticket Delivery | 🟡 | 2/3 | S2 Complete | ✅ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
-| F010 | Organizer Dashboard | 🔴 | 0/3 | - | ⬜ |
+| F010 | Organizer Dashboard | 🟡 | 1/3 | S1 Complete | ✅ |
 | F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
 | F012 | Event Communication (Messaging + FAQ) | 🟢 | 3/3 | S3 Open Chat | ✅ |
 | F013 | Invitation System | 🟢 | 1/1 | Done | ✅ |
@@ -36,8 +36,8 @@
 | Metric | Value |
 |--------|-------|
 | Total Flows | 14 |
-| 🔴 Planned | 1 |
-| 🟡 Active | 1 |
+| 🔴 Planned | 0 |
+| 🟡 Active | 2 |
 | 🟢 Done | 12 |
 | ⚫ Blocked | 0 |
 
@@ -165,4 +165,4 @@ F001 (User Registration)
 
 ---
 
-*Last updated: 2026-01-29*
+*Last updated: 2026-02-02*

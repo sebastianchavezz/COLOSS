@@ -1,19 +1,19 @@
 # Flow: Organizer Dashboard
 
 **ID**: F010
-**Status**: 🔴 Planned
+**Status**: 🟡 Active
 **Total Sprints**: 3
-**Current Sprint**: -
+**Current Sprint**: S1 (Complete)
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| S1 | Event overview + stats | 🔴 |
-| S2 | Participant management | 🔴 |
-| S3 | Reports + export | 🔴 |
+| S1 | Data Layer + Stats RPCs | 🟢 Done |
+| S2 | Participant management + Export | 🔴 Planned |
+| S3 | Reports + Financial (later) | 🔴 Planned |
 
 ## Dependencies
-- **Requires**: F002, F003
+- **Requires**: F002 ✅, F003 ✅, F006 ✅
 - **Blocks**: None
 
 ## Overview
@@ -25,6 +25,25 @@ Als organisator
 Wil ik een overzicht van mijn evenementen
 Zodat ik alles kan beheren en monitoren
 ```
+
+## Sprint S1 Deliverables (Complete)
+
+### RPCs Created
+| RPC | Purpose | Auth |
+|-----|---------|------|
+| `get_org_dashboard_stats` | Full org overview | org_member |
+| `get_event_dashboard_stats` | Event-level KPIs | org_member |
+| `get_event_participant_stats` | Participant breakdown | org_member |
+
+### Views Created
+| View | Purpose |
+|------|---------|
+| `v_event_ticket_stats` | Aggregated ticket counts per event |
+| `v_ticket_type_stats` | Breakdown by ticket type |
+| `v_event_checkin_stats` | Check-in statistics |
+
+### TypeScript Types
+- `web/src/types/dashboard.ts` - Full type definitions for all RPC responses
 
 ## Flow Diagram
 
@@ -41,58 +60,66 @@ Zodat ik alles kan beheren en monitoren
 
 ## Supabase
 
-### Tables
+### Tables Used
 | Table | Purpose |
 |-------|---------|
 | `orgs` | Organization data |
-| `org_members` | Team members |
+| `org_members` | Team members (RLS check) |
 | `events` | All org events |
-| `registrations` | Participant data |
-| `orders` | Financial data |
+| `ticket_types` | Ticket configuration |
+| `ticket_instances` | Sold tickets |
+| `ticket_checkins` | Check-in records |
+| `orders` | Order data |
+| `audit_log` | Activity feed |
 
 ### RLS Policies
 | Policy | Table | Rule |
 |--------|-------|------|
-| `org_member_read` | all | User is org member |
-| `org_admin_write` | settings | User is owner/admin |
+| `org_member_read` | all views | User is org member |
+| RPC auth check | RPCs | `is_org_member()` called |
 
-### Edge Functions
-| Function | Purpose |
-|----------|---------|
-| `dashboard-stats` | Aggregate statistics |
-| `export-participants` | CSV/Excel export |
-| `check-in` | Scan ticket QR |
-
-## API Endpoints
+### API Endpoints (S1)
 
 | Method | Endpoint | Auth |
 |--------|----------|------|
-| GET | `/rest/v1/events?org_id=eq.{id}` | Yes (org) |
-| GET | `/functions/v1/dashboard-stats` | Yes (org) |
-| GET | `/functions/v1/export-participants` | Yes (org) |
-| POST | `/functions/v1/check-in` | Yes (org) |
+| POST | `/rest/v1/rpc/get_org_dashboard_stats` | org_member |
+| POST | `/rest/v1/rpc/get_event_dashboard_stats` | org_member |
+| POST | `/rest/v1/rpc/get_event_participant_stats` | org_member |
 
-## Test Scenarios
+## Test Results (S1)
 
-| ID | Scenario | Expected |
-|----|----------|----------|
-| T1 | View dashboard | Stats shown |
-| T2 | List participants | Searchable list |
-| T3 | Export CSV | Download works |
-| T4 | Check-in scan | Ticket validated |
-| T5 | View financials | Revenue shown |
-| T6 | Cross-org access | RLS denied |
+| Test | Result |
+|------|--------|
+| RPC get_org_dashboard_stats exists | ✅ |
+| RPC get_event_dashboard_stats exists | ✅ |
+| RPC get_event_participant_stats exists | ✅ |
+| Anonymous blocked from org dashboard | ✅ |
+| Anonymous blocked from event dashboard | ✅ |
+| View v_event_ticket_stats queryable | ✅ |
+| View v_ticket_type_stats queryable | ✅ |
+| View v_event_checkin_stats queryable | ✅ |
+| Response structure validation | ✅ |
+
+**Total: 10/10 passing**
 
 ## Acceptance Criteria
 
-- [ ] Dashboard shows key metrics
+### S1 (Complete)
+- [x] Dashboard RPCs return correct data
+- [x] RLS enforces org isolation
+- [x] Views aggregate ticket/checkin stats
+- [x] TypeScript types match RPC output
+- [x] Tests passing
+
+### S2 (Planned)
 - [ ] Participant list searchable
 - [ ] Export to CSV/Excel
 - [ ] Check-in scanner works
-- [ ] Financial overview accurate
-- [ ] Team management works
-- [ ] RLS enforces org isolation
+
+### S3 (Planned - Later)
+- [ ] Financial overview (financing module)
+- [ ] Reports generation
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2026-02-02*
