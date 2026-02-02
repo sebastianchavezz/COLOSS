@@ -124,7 +124,7 @@
 | F007 | 🟡 In Progress | 67% | S3 pending |
 | F008 | 🟢 Completed | 100% | - |
 | F009 | 🔴 Planned | 0% | F006 (done) |
-| F010 | 🟡 In Progress | 33% | S1 done, S2/S3 planned |
+| F010 | 🟡 In Progress | 67% | S1+S2 done, S3 pending |
 | F011 | 🟢 Completed | 100% | - |
 | F012 | 🟢 Completed | 100% | - |
 
