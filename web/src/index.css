@@ -6,25 +6,155 @@
 @tailwind components;
 @tailwind utilities;
 
-*, *::before, *::after {
-  box-sizing: border-box;
+@layer base {
+  /* ============================================
+   * COLOSS Design System - Semantic Color Tokens
+   * Best practice: CSS variables for dark mode
+   * ============================================ */
+
+  :root {
+    /* Background colors */
+    --background: 250 250 250;        /* gray-50 */
+    --background-secondary: 255 255 255; /* white */
+    --background-tertiary: 243 244 246; /* gray-100 */
+
+    /* Foreground (text) colors */
+    --foreground: 17 24 39;           /* gray-900 */
+    --foreground-secondary: 75 85 99; /* gray-600 */
+    --foreground-muted: 156 163 175;  /* gray-400 */
+
+    /* Card/Surface colors */
+    --card: 255 255 255;              /* white */
+    --card-foreground: 17 24 39;      /* gray-900 */
+
+    /* Border colors */
+    --border: 229 231 235;            /* gray-200 */
+    --border-secondary: 209 213 219;  /* gray-300 */
+
+    /* Input colors */
+    --input: 255 255 255;             /* white */
+    --input-border: 209 213 219;      /* gray-300 */
+
+    /* Primary (brand) colors */
+    --primary: 0 82 255;              /* coloss-blue */
+    --primary-foreground: 255 255 255;
+
+    /* Secondary colors */
+    --secondary: 243 244 246;         /* gray-100 */
+    --secondary-foreground: 17 24 39; /* gray-900 */
+
+    /* Muted colors */
+    --muted: 243 244 246;             /* gray-100 */
+    --muted-foreground: 107 114 128;  /* gray-500 */
+
+    /* Accent colors */
+    --accent: 243 244 246;            /* gray-100 */
+    --accent-foreground: 17 24 39;    /* gray-900 */
+
+    /* Destructive colors */
+    --destructive: 239 68 68;         /* red-500 */
+    --destructive-foreground: 255 255 255;
+
+    /* Success colors */
+    --success: 34 197 94;             /* green-500 */
+    --success-foreground: 255 255 255;
+
+    /* Warning colors */
+    --warning: 234 179 8;             /* yellow-500 */
+    --warning-foreground: 17 24 39;
+
+    /* Ring (focus) color */
+    --ring: 0 82 255;                 /* coloss-blue */
+
+    /* Radius */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Background colors */
+    --background: 23 23 23;           /* neutral-900 */
+    --background-secondary: 38 38 38; /* neutral-800 */
+    --background-tertiary: 45 45 45;  /* neutral-800 lighter */
+
+    /* Foreground (text) colors */
+    --foreground: 250 250 250;        /* neutral-50 */
+    --foreground-secondary: 163 163 163; /* neutral-400 */
+    --foreground-muted: 115 115 115;  /* neutral-500 */
+
+    /* Card/Surface colors */
+    --card: 38 38 38;                 /* neutral-800 */
+    --card-foreground: 250 250 250;   /* neutral-50 */
+
+    /* Border colors */
+    --border: 64 64 64;               /* neutral-700 */
+    --border-secondary: 82 82 82;     /* neutral-600 */
+
+    /* Input colors */
+    --input: 38 38 38;                /* neutral-800 */
+    --input-border: 64 64 64;         /* neutral-700 */
+
+    /* Primary (brand) colors - slightly brighter for dark mode */
+    --primary: 59 130 246;            /* blue-500 */
+    --primary-foreground: 255 255 255;
+
+    /* Secondary colors */
+    --secondary: 38 38 38;            /* neutral-800 */
+    --secondary-foreground: 250 250 250;
+
+    /* Muted colors */
+    --muted: 38 38 38;                /* neutral-800 */
+    --muted-foreground: 163 163 163;  /* neutral-400 */
+
+    /* Accent colors */
+    --accent: 45 45 45;               /* neutral-800 lighter */
+    --accent-foreground: 250 250 250;
+
+    /* Destructive colors */
+    --destructive: 239 68 68;         /* red-500 */
+    --destructive-foreground: 255 255 255;
+
+    /* Success colors */
+    --success: 34 197 94;             /* green-500 */
+    --success-foreground: 255 255 255;
+
+    /* Warning colors */
+    --warning: 234 179 8;             /* yellow-500 */
+    --warning-foreground: 23 23 23;
+
+    /* Ring (focus) color */
+    --ring: 59 130 246;               /* blue-500 */
+  }
+
+  * {
+    border-color: rgb(var(--border));
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: rgb(var(--background));
+    color: rgb(var(--foreground));
+    font-family: 'Inter', 'Albert Sans', system-ui, Avenir, Helvetica, Arial, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
+/* Heading font */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Panchang", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-:root {
-  font-family: 'Inter', 'Albert Sans', system-ui, Avenir, Helvetica, Arial, sans-serif;
+.font-heading {
+  font-family: "Panchang", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-body {
-  @apply bg-gray-50 text-gray-900;
-}
-
-/* COLOSS Design System Colors */
+/* COLOSS Design System Colors (legacy support) */
 .text-coloss-blue {
   color: #0052ff;
 }
@@ -49,19 +179,240 @@ body {
   color: #8a8f99;
 }
 
-/* Heading font */
-h1, h2, h3, h4, h5, h6 {
-  font-family: "Panchang", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-.font-heading {
-  font-family: "Panchang", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
 /* Film grain noise overlay */
 @layer components {
   .noise-overlay {
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' result='noise' seed='2' /%3E%3C/filter%3E%3Crect width='400' height='400' fill='white' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
     background-size: 200px 200px;
   }
+}
+
+/* ============================================
+ * Dark Mode Automatic Conversions
+ * Converts common Tailwind classes to dark variants
+ * This allows existing components to work without changes
+ * ============================================ */
+
+/* Background conversions */
+.dark .bg-white {
+  background-color: rgb(var(--card)) !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: rgb(var(--background)) !important;
+}
+
+.dark .bg-gray-100 {
+  background-color: rgb(var(--background-secondary)) !important;
+}
+
+.dark .bg-gray-200 {
+  background-color: rgb(var(--background-tertiary)) !important;
+}
+
+/* Text color conversions */
+.dark .text-gray-900 {
+  color: rgb(var(--foreground)) !important;
+}
+
+.dark .text-gray-800 {
+  color: rgb(var(--foreground)) !important;
+}
+
+.dark .text-gray-700 {
+  color: rgb(var(--foreground-secondary)) !important;
+}
+
+.dark .text-gray-600 {
+  color: rgb(var(--foreground-secondary)) !important;
+}
+
+.dark .text-gray-500 {
+  color: rgb(var(--foreground-muted)) !important;
+}
+
+.dark .text-gray-400 {
+  color: rgb(var(--foreground-muted)) !important;
+}
+
+.dark .text-black {
+  color: rgb(var(--foreground)) !important;
+}
+
+/* Border conversions */
+.dark .border-gray-100 {
+  border-color: rgb(var(--border)) !important;
+}
+
+.dark .border-gray-200 {
+  border-color: rgb(var(--border)) !important;
+}
+
+.dark .border-gray-300 {
+  border-color: rgb(var(--border-secondary)) !important;
+}
+
+/* Divide conversions */
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(var(--border)) !important;
+}
+
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(var(--border)) !important;
+}
+
+/* Ring conversions */
+.dark .ring-gray-200 {
+  --tw-ring-color: rgb(var(--border)) !important;
+}
+
+.dark .ring-gray-300 {
+  --tw-ring-color: rgb(var(--border-secondary)) !important;
+}
+
+/* Hover state conversions */
+.dark .hover\:bg-gray-50:hover {
+  background-color: rgb(var(--background-secondary)) !important;
+}
+
+.dark .hover\:bg-gray-100:hover {
+  background-color: rgb(var(--background-tertiary)) !important;
+}
+
+.dark .hover\:bg-gray-200:hover {
+  background-color: rgb(var(--accent)) !important;
+}
+
+.dark .hover\:border-gray-300:hover {
+  border-color: rgb(var(--border-secondary)) !important;
+}
+
+.dark .hover\:text-gray-900:hover {
+  color: rgb(var(--foreground)) !important;
+}
+
+.dark .hover\:text-black:hover {
+  color: rgb(var(--foreground)) !important;
+}
+
+/* Focus state conversions */
+.dark .focus\:ring-gray-200:focus {
+  --tw-ring-color: rgb(var(--border)) !important;
+}
+
+.dark .focus\:border-gray-300:focus {
+  border-color: rgb(var(--border-secondary)) !important;
+}
+
+/* Placeholder conversions */
+.dark .placeholder-gray-400::placeholder {
+  color: rgb(var(--foreground-muted)) !important;
+}
+
+.dark .placeholder-gray-500::placeholder {
+  color: rgb(var(--foreground-muted)) !important;
+}
+
+/* Shadow adjustments for dark mode */
+.dark .shadow-sm,
+.dark .shadow,
+.dark .shadow-md,
+.dark .shadow-lg,
+.dark .shadow-xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.4);
+}
+
+/* Status badge colors - keep visible in dark mode */
+.dark .bg-green-100 {
+  background-color: rgba(34, 197, 94, 0.2) !important;
+}
+
+.dark .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+.dark .bg-yellow-100 {
+  background-color: rgba(234, 179, 8, 0.2) !important;
+}
+
+.dark .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.dark .bg-indigo-100 {
+  background-color: rgba(99, 102, 241, 0.2) !important;
+}
+
+.dark .bg-purple-100 {
+  background-color: rgba(168, 85, 247, 0.2) !important;
+}
+
+.dark .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+.dark .bg-green-50 {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+}
+
+.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.dark .bg-purple-50 {
+  background-color: rgba(168, 85, 247, 0.15) !important;
+}
+
+/* Primary button - keep prominent */
+.dark .bg-black {
+  background-color: rgb(var(--foreground)) !important;
+}
+
+.dark .bg-black.text-white {
+  color: rgb(var(--background)) !important;
+}
+
+.dark .hover\:bg-gray-800:hover {
+  background-color: rgba(250, 250, 250, 0.9) !important;
+}
+
+/* Indigo buttons/links */
+.dark .bg-indigo-600 {
+  background-color: rgb(79, 70, 229) !important;
+}
+
+.dark .hover\:bg-indigo-700:hover {
+  background-color: rgb(67, 56, 202) !important;
+}
+
+.dark .text-indigo-600 {
+  color: rgb(129, 140, 248) !important;
+}
+
+.dark .hover\:text-indigo-500:hover {
+  color: rgb(165, 180, 252) !important;
+}
+
+/* Modal/Overlay backgrounds */
+.dark .bg-black\/50 {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Scrollbar styling for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgb(var(--background-secondary));
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(var(--border-secondary));
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--foreground-muted));
 }

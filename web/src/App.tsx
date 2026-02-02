@@ -12,6 +12,8 @@
 
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { ThemeProvider } from './contexts/ThemeContext'
+import { GlobalThemeToggle } from './components/GlobalThemeToggle'
 import ProtectedRoute from './components/ProtectedRoute'
 import { Layout } from './components/Layout'
 import { EventsList } from './pages/EventsList'
@@ -63,23 +65,28 @@ function App() {
   // Coming Soon Mode - only homepage and coming-soon page work
   if (COMING_SOON_MODE) {
     return (
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Homepage />} />
-            <Route path="/coming-soon" element={<ComingSoon />} />
-            {/* All other routes go to Coming Soon */}
-            <Route path="*" element={<ComingSoon />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <GlobalThemeToggle />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Homepage />} />
+              <Route path="/coming-soon" element={<ComingSoon />} />
+              {/* All other routes go to Coming Soon */}
+              <Route path="*" element={<ComingSoon />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
     )
   }
 
   return (
-    <AuthProvider>
-      <AuthDebug />
-      <BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <AuthDebug />
+        <GlobalThemeToggle />
+        <BrowserRouter>
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<Homepage />} />
@@ -155,8 +162,9 @@ function App() {
             </Route>
           </Route>
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
