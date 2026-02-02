@@ -40,7 +40,9 @@ function assert(cond, msg) {
 }
 
 // === TESTS ===
-console.log("🧪 F010 Dashboard Integration Tests\n");
+console.log("🧪 F010 Dashboard Integration Tests (S1 + S2)\n");
+console.log("=".repeat(50));
+console.log("Sprint S1: Dashboard Stats RPCs");
 console.log("=".repeat(50));
 
 // ------------------------------------------
@@ -217,6 +219,108 @@ await test("Event stats response has correct error structure", async () => {
   assert(
     "error" in data || "event" in data,
     "Response should have error or event field"
+  );
+});
+
+// ------------------------------------------
+// S2 Tests: Excel Export + Bulk Check-in
+// ------------------------------------------
+console.log("\n" + "=".repeat(50));
+console.log("Sprint S2: Excel Export + Bulk Check-in");
+console.log("=".repeat(50));
+
+// Test 11: RPC export_registrations_xlsx_data exists
+await test("RPC export_registrations_xlsx_data exists", async () => {
+  const { data, error } = await supabase.rpc("export_registrations_xlsx_data", {
+    _event_id: crypto.randomUUID(),
+    _filters: {}
+  });
+
+  if (error?.message?.includes("does not exist")) {
+    throw new Error("RPC not found: " + error.message);
+  }
+
+  // Should return NOT_FOUND or NOT_AUTHORIZED
+  assert(
+    data?.error === "NOT_AUTHORIZED" || data?.error === "NOT_FOUND" || data?.error === "FORBIDDEN",
+    `Expected auth error, got: ${JSON.stringify(data)}`
+  );
+});
+
+// Test 12: RPC bulk_checkin_participants exists
+await test("RPC bulk_checkin_participants exists", async () => {
+  const { data, error } = await supabase.rpc("bulk_checkin_participants", {
+    _event_id: crypto.randomUUID(),
+    _ticket_instance_ids: []
+  });
+
+  if (error?.message?.includes("does not exist")) {
+    throw new Error("RPC not found: " + error.message);
+  }
+
+  assert(
+    data?.error === "NOT_AUTHORIZED" || data?.error === "NOT_FOUND",
+    `Expected auth error, got: ${JSON.stringify(data)}`
+  );
+});
+
+// Test 13: Excel export requires admin role
+await test("Excel export requires authorization", async () => {
+  const { data } = await supabase.rpc("export_registrations_xlsx_data", {
+    _event_id: crypto.randomUUID(),
+    _filters: {}
+  });
+
+  assert(
+    data?.error !== undefined,
+    "Anonymous should be blocked from export"
+  );
+});
+
+// Test 14: Bulk check-in requires org membership
+await test("Bulk check-in requires authorization", async () => {
+  const { data } = await supabase.rpc("bulk_checkin_participants", {
+    _event_id: crypto.randomUUID(),
+    _ticket_instance_ids: [crypto.randomUUID()]
+  });
+
+  assert(
+    data?.error === "NOT_AUTHORIZED" || data?.error === "NOT_FOUND",
+    "Anonymous should be blocked from bulk check-in"
+  );
+});
+
+// Test 15: Excel export response structure
+await test("Excel export response has correct error structure", async () => {
+  const { data } = await supabase.rpc("export_registrations_xlsx_data", {
+    _event_id: crypto.randomUUID(),
+    _filters: {}
+  });
+
+  assert(
+    typeof data === "object" && data !== null,
+    "Response should be an object"
+  );
+  assert(
+    "error" in data || "rows" in data,
+    "Response should have error or rows field"
+  );
+});
+
+// Test 16: Bulk check-in response structure
+await test("Bulk check-in response has correct error structure", async () => {
+  const { data } = await supabase.rpc("bulk_checkin_participants", {
+    _event_id: crypto.randomUUID(),
+    _ticket_instance_ids: []
+  });
+
+  assert(
+    typeof data === "object" && data !== null,
+    "Response should be an object"
+  );
+  assert(
+    "error" in data || "success_count" in data,
+    "Response should have error or success_count field"
   );
 });
 

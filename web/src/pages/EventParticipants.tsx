@@ -23,7 +23,11 @@ import {
     Filter,
     ChevronLeft,
     ChevronRight,
-    Loader2
+    Loader2,
+    FileSpreadsheet,
+    CheckSquare,
+    Square,
+    X
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
@@ -98,6 +102,11 @@ export function EventParticipants() {
     const [ticketTypes, setTicketTypes] = useState<TicketType[]>([])
     const [total, setTotal] = useState(0)
     const [pages, setPages] = useState(0)
+
+    // Selection state for bulk actions
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [bulkLoading, setBulkLoading] = useState(false)
+    const [exportingExcel, setExportingExcel] = useState(false)
 
     // UI state
     const [loading, setLoading] = useState(true)
@@ -227,6 +236,108 @@ export function EventParticipants() {
         setExporting(false)
     }
 
+    // Export Excel
+    const handleExportExcel = async () => {
+        if (!event) return
+
+        setExportingExcel(true)
+        setError(null)
+
+        try {
+            const { data, error: exportError } = await supabase.rpc('export_registrations_xlsx_data', {
+                _event_id: event.id,
+                _filters: filters
+            })
+
+            if (exportError) throw exportError
+            if (data?.error) throw new Error(data.message || data.error)
+
+            // Dynamic import of xlsx library
+            const XLSX = await import('xlsx')
+
+            // Create worksheet from data
+            const ws = XLSX.utils.json_to_sheet(data.rows || [])
+
+            // Create workbook
+            const wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb, ws, 'Registraties')
+
+            // Download
+            XLSX.writeFile(wb, `registrations-${event.slug}-${new Date().toISOString().split('T')[0]}.xlsx`)
+        } catch (err: any) {
+            console.error('[EventParticipants] Excel export error:', err)
+            setError(err.message || 'Excel export failed')
+        }
+
+        setExportingExcel(false)
+    }
+
+    // Bulk Check-in
+    const handleBulkCheckIn = async () => {
+        if (!event || selected.size === 0) return
+
+        setBulkLoading(true)
+        setError(null)
+
+        try {
+            // Get ticket_instance_ids for selected registrations
+            const ticketIds = registrations
+                .filter(r => selected.has(r.id) && r.ticket_instance_id)
+                .map(r => r.ticket_instance_id!)
+
+            if (ticketIds.length === 0) {
+                setError('Geen tickets geselecteerd met een toegewezen ticket')
+                setBulkLoading(false)
+                return
+            }
+
+            const { data, error: bulkError } = await supabase.rpc('bulk_checkin_participants', {
+                _event_id: event.id,
+                _ticket_instance_ids: ticketIds
+            })
+
+            if (bulkError) throw bulkError
+            if (data?.error) throw new Error(data.message || data.error)
+
+            // Show result
+            const successCount = data?.success_count || 0
+            const failedCount = data?.failed_count || 0
+
+            if (failedCount > 0) {
+                setError(`${successCount} ingecheckt, ${failedCount} mislukt`)
+            }
+
+            // Clear selection and refresh
+            setSelected(new Set())
+            fetchRegistrations()
+        } catch (err: any) {
+            console.error('[EventParticipants] Bulk check-in error:', err)
+            setError(err.message || 'Bulk check-in failed')
+        }
+
+        setBulkLoading(false)
+    }
+
+    // Toggle selection
+    const toggleSelect = (id: string) => {
+        const newSelected = new Set(selected)
+        if (newSelected.has(id)) {
+            newSelected.delete(id)
+        } else {
+            newSelected.add(id)
+        }
+        setSelected(newSelected)
+    }
+
+    // Select all on current page
+    const toggleSelectAll = () => {
+        if (selected.size === registrations.length) {
+            setSelected(new Set())
+        } else {
+            setSelected(new Set(registrations.map(r => r.id)))
+        }
+    }
+
     // Stats
     const paidCount = registrations.filter(r => r.payment_status === 'paid').length
     const assignedCount = registrations.filter(r => r.assignment_status === 'assigned').length
@@ -246,22 +357,41 @@ export function EventParticipants() {
                     </p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <button
-                        onClick={handleExport}
-                        disabled={exporting || total === 0}
-                        className={clsx(
-                            'inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md',
-                            'border-gray-300 text-gray-700 bg-white hover:bg-gray-50',
-                            'disabled:opacity-50 disabled:cursor-not-allowed'
-                        )}
-                    >
-                        {exporting ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                            <Download className="mr-2 h-4 w-4" />
-                        )}
-                        Export CSV
-                    </button>
+                    {/* Export Dropdown */}
+                    <div className="relative inline-block">
+                        <button
+                            onClick={handleExport}
+                            disabled={exporting || exportingExcel || total === 0}
+                            className={clsx(
+                                'inline-flex items-center px-4 py-2 border text-sm font-medium rounded-l-md',
+                                'border-gray-300 text-gray-700 bg-white hover:bg-gray-50',
+                                'disabled:opacity-50 disabled:cursor-not-allowed'
+                            )}
+                        >
+                            {exporting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <Download className="mr-2 h-4 w-4" />
+                            )}
+                            CSV
+                        </button>
+                        <button
+                            onClick={handleExportExcel}
+                            disabled={exporting || exportingExcel || total === 0}
+                            className={clsx(
+                                'inline-flex items-center px-4 py-2 border-t border-b border-r text-sm font-medium rounded-r-md',
+                                'border-gray-300 text-gray-700 bg-white hover:bg-gray-50',
+                                'disabled:opacity-50 disabled:cursor-not-allowed'
+                            )}
+                        >
+                            {exportingExcel ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                            )}
+                            Excel
+                        </button>
+                    </div>
                     <Link
                         to={`/scan/${event.slug}`}
                         className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
@@ -413,12 +543,57 @@ export function EventParticipants() {
                 </div>
             ) : (
                 <>
+                    {/* Bulk Action Bar */}
+                    {selected.size > 0 && (
+                        <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
+                            <div className="flex items-center">
+                                <CheckSquare className="h-5 w-5 text-indigo-600 mr-2" />
+                                <span className="text-sm font-medium text-indigo-900">
+                                    {selected.size} geselecteerd
+                                </span>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                                <button
+                                    onClick={handleBulkCheckIn}
+                                    disabled={bulkLoading}
+                                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                                >
+                                    {bulkLoading ? (
+                                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <CheckCircle className="mr-1 h-4 w-4" />
+                                    )}
+                                    Check-in
+                                </button>
+                                <button
+                                    onClick={() => setSelected(new Set())}
+                                    className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                >
+                                    <X className="mr-1 h-4 w-4" />
+                                    Annuleren
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Table */}
                     <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
                         <table className="min-w-full divide-y divide-gray-300">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">
+                                    <th className="py-3.5 pl-4 pr-2 text-left">
+                                        <button
+                                            onClick={toggleSelectAll}
+                                            className="text-gray-400 hover:text-gray-600"
+                                        >
+                                            {selected.size === registrations.length && registrations.length > 0 ? (
+                                                <CheckSquare className="h-5 w-5 text-indigo-600" />
+                                            ) : (
+                                                <Square className="h-5 w-5" />
+                                            )}
+                                        </button>
+                                    </th>
+                                    <th className="py-3.5 pl-2 pr-3 text-left text-sm font-semibold text-gray-900">
                                         Deelnemer
                                     </th>
                                     <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
@@ -440,8 +615,23 @@ export function EventParticipants() {
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-white">
                                 {registrations.map((reg) => (
-                                    <tr key={reg.id} className="hover:bg-gray-50">
-                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm">
+                                    <tr key={reg.id} className={clsx(
+                                        'hover:bg-gray-50',
+                                        selected.has(reg.id) && 'bg-indigo-50'
+                                    )}>
+                                        <td className="whitespace-nowrap py-4 pl-4 pr-2">
+                                            <button
+                                                onClick={() => toggleSelect(reg.id)}
+                                                className="text-gray-400 hover:text-gray-600"
+                                            >
+                                                {selected.has(reg.id) ? (
+                                                    <CheckSquare className="h-5 w-5 text-indigo-600" />
+                                                ) : (
+                                                    <Square className="h-5 w-5" />
+                                                )}
+                                            </button>
+                                        </td>
+                                        <td className="whitespace-nowrap py-4 pl-2 pr-3 text-sm">
                                             <div className="font-medium text-gray-900">
                                                 {reg.first_name} {reg.last_name}
                                             </div>

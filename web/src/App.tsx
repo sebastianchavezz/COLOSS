@@ -51,9 +51,10 @@ import { EventRoute } from './pages/public/EventRoute'
 import { EventInvitations } from './pages/EventInvitations'
 import { PublicInvite } from './pages/public/PublicInvite'
 import { TeamPage } from './pages/TeamPage'
+import { OrgDashboard } from './pages/OrgDashboard'
 import { Homepage } from './pages/Homepage'
 import { ComingSoon } from './pages/ComingSoon'
-import { SporterLayout, SporterDashboard, MijnTickets, Profiel } from './pages/sporter'
+import { SporterLayout, SporterDashboard, MijnTickets, MijnBerichten, Profiel } from './pages/sporter'
 
 // Set to true to enable "Coming Soon" mode for deployment
 const COMING_SOON_MODE = false
@@ -106,6 +107,7 @@ function App() {
             <Route path="/my" element={<SporterLayout />}>
               <Route index element={<SporterDashboard />} />
               <Route path="tickets" element={<MijnTickets />} />
+              <Route path="messages" element={<MijnBerichten />} />
               <Route path="profile" element={<Profiel />} />
             </Route>
 
@@ -123,8 +125,8 @@ function App() {
 
             {/* Org-scoped routes (protected by Layout) */}
             <Route path="/org/:orgSlug" element={<Layout><Outlet /></Layout>}>
-              {/* Default redirect naar events */}
-              <Route index element={<Navigate to="events" replace />} />
+              {/* Org Dashboard landing page */}
+              <Route index element={<OrgDashboard />} />
 
               {/* Events module */}
               <Route path="events" element={<EventsList />} />

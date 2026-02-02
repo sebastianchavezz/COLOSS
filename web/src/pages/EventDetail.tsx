@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate, Link, Outlet } from 'react-router-dom'
+import { useParams, useNavigate, Link, Outlet, useOutletContext } from 'react-router-dom'
 import {
     ArrowLeft, Loader2, Trash2, CheckCircle, XCircle,
     LayoutDashboard, Ticket, ShoppingCart, Users, Route, Package,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useOrgSafe } from '../hooks/useOrg'
+import { supabase } from '../lib/supabase'
 import { getEventBySlug, setEventStatus, softDeleteEvent, listEvents } from '../data/events'
 import type { AppEvent } from '../types/supabase'
 import {
@@ -462,19 +463,160 @@ function StatusBadge({ status }: { status: string }) {
 // ============================================================
 
 export function EventOverview() {
+    const { event } = useOutletContext<{ event: AppEvent; org: any; refreshEvent: () => void }>()
+    const [stats, setStats] = useState<any>(null)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        async function fetchStats() {
+            if (!event) return
+
+            const { data } = await supabase.rpc('get_event_dashboard_stats', {
+                _event_id: event.id
+            })
+
+            if (data && !data.error) {
+                setStats(data)
+            }
+            setLoading(false)
+        }
+        fetchStats()
+    }, [event?.id])
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+            </div>
+        )
+    }
+
+    if (!stats) {
+        return (
+            <div className="text-center py-12">
+                <p className="text-gray-500">Kon statistieken niet laden</p>
+            </div>
+        )
+    }
+
+    const checkinPercent = stats.tickets?.issued > 0
+        ? Math.round((stats.checkins?.total / stats.tickets.issued) * 100)
+        : 0
+
     return (
-        <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Event Overzicht</h3>
-            <p className="text-gray-500">
-                Hier komt een dashboard met statistieken: aantal inschrijvingen, omzet, etc.
-            </p>
-            <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3">
-                {['Inschrijvingen', 'Omzet', 'Tickets verkocht'].map((stat) => (
-                    <div key={stat} className="bg-white rounded-lg px-4 py-5 text-center shadow-sm border border-gray-200">
-                        <p className="text-sm font-medium text-gray-500">{stat}</p>
-                        <p className="mt-1 text-3xl font-semibold text-gray-900">–</p>
+        <div className="space-y-6">
+            {/* Header */}
+            <div>
+                <h3 className="text-lg font-medium text-gray-900">Event Overzicht</h3>
+                <p className="text-sm text-gray-500">{stats.event?.name}</p>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-4">
+                <div className="bg-white rounded-lg px-4 py-5 shadow-sm border border-gray-200">
+                    <p className="text-sm font-medium text-gray-500">Tickets verkocht</p>
+                    <p className="mt-1 text-3xl font-semibold text-gray-900">{stats.tickets?.issued || 0}</p>
+                    <p className="text-xs text-gray-400">van {stats.tickets?.capacity || 0} capaciteit</p>
+                </div>
+                <div className="bg-white rounded-lg px-4 py-5 shadow-sm border border-gray-200">
+                    <p className="text-sm font-medium text-gray-500">Ingecheckt</p>
+                    <p className="mt-1 text-3xl font-semibold text-green-600">{stats.checkins?.total || 0}</p>
+                    <p className="text-xs text-gray-400">{checkinPercent}% van verkocht</p>
+                </div>
+                <div className="bg-white rounded-lg px-4 py-5 shadow-sm border border-gray-200">
+                    <p className="text-sm font-medium text-gray-500">Vandaag ingecheckt</p>
+                    <p className="mt-1 text-3xl font-semibold text-blue-600">{stats.checkins?.today || 0}</p>
+                </div>
+                <div className="bg-white rounded-lg px-4 py-5 shadow-sm border border-gray-200">
+                    <p className="text-sm font-medium text-gray-500">Beschikbaar</p>
+                    <p className="mt-1 text-3xl font-semibold text-gray-900">{stats.tickets?.available || 0}</p>
+                    <p className="text-xs text-gray-400">nog te koop</p>
+                </div>
+            </div>
+
+            {/* Check-in Progress */}
+            {stats.tickets?.issued > 0 && (
+                <div className="bg-white rounded-lg p-5 shadow-sm border border-gray-200">
+                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                        <span>Check-in voortgang</span>
+                        <span>{checkinPercent}%</span>
                     </div>
-                ))}
+                    <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-green-500 rounded-full transition-all"
+                            style={{ width: `${checkinPercent}%` }}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Ticket Types Breakdown */}
+            {stats.ticket_types?.length > 0 && (
+                <div className="bg-white rounded-lg p-5 shadow-sm border border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-900 mb-4">Ticket types</h4>
+                    <div className="space-y-3">
+                        {stats.ticket_types.map((tt: any) => (
+                            <div key={tt.id} className="flex items-center justify-between">
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{tt.name}</p>
+                                    <p className="text-xs text-gray-500">€{tt.price}</p>
+                                </div>
+                                <div className="flex items-center space-x-4 text-sm">
+                                    <span className="text-gray-600">{tt.sold} verkocht</span>
+                                    <span className="text-green-600">{tt.checked_in} ingecheckt</span>
+                                    <span className="text-gray-400">{tt.available} beschikbaar</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Recent Activity */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {/* Recent Orders */}
+                <div className="bg-white rounded-lg p-5 shadow-sm border border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-900 mb-4">Recente bestellingen</h4>
+                    {stats.recent_orders?.length > 0 ? (
+                        <ul className="space-y-3">
+                            {stats.recent_orders.slice(0, 5).map((order: any) => (
+                                <li key={order.id} className="flex justify-between text-sm">
+                                    <span className="text-gray-600 truncate">{order.email}</span>
+                                    <span className={clsx(
+                                        'font-medium',
+                                        order.status === 'paid' ? 'text-green-600' : 'text-yellow-600'
+                                    )}>
+                                        €{order.total_amount}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-sm text-gray-500">Geen recente bestellingen</p>
+                    )}
+                </div>
+
+                {/* Recent Check-ins */}
+                <div className="bg-white rounded-lg p-5 shadow-sm border border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-900 mb-4">Recente check-ins</h4>
+                    {stats.recent_checkins?.length > 0 ? (
+                        <ul className="space-y-3">
+                            {stats.recent_checkins.slice(0, 5).map((checkin: any, idx: number) => (
+                                <li key={idx} className="flex justify-between text-sm">
+                                    <span className="text-gray-600 truncate">{checkin.ticket_type_name}</span>
+                                    <span className="text-gray-400 text-xs">
+                                        {new Date(checkin.checked_in_at).toLocaleTimeString('nl-NL', {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-sm text-gray-500">Geen recente check-ins</p>
+                    )}
+                </div>
             </div>
         </div>
     )
