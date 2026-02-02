@@ -83,14 +83,14 @@ export default function Hero({ onNavigate }: HeroProps) {
               <span className="absolute bottom-0 left-0 w-0 h-px bg-coloss-offwhite group-hover:w-full transition-all duration-300" />
             </a>
             <Link
-              to="/coming-soon"
+              to="/org/demo"
               className="text-coloss-offwhite hover:text-white transition-colors duration-300 relative group font-medium uppercase tracking-wider font-heading"
             >
               Organizers
               <span className="absolute bottom-0 left-0 w-0 h-px bg-coloss-offwhite group-hover:w-full transition-all duration-300" />
             </Link>
             <Link
-              to="/coming-soon"
+              to="/my"
               className="text-coloss-offwhite hover:text-white transition-colors duration-300 relative group font-medium uppercase tracking-wider font-heading"
             >
               Sporters
@@ -101,14 +101,14 @@ export default function Hero({ onNavigate }: HeroProps) {
           {/* Right - For organizers & For sporters (hidden on mobile, shown on md+) */}
           <div className="hidden md:flex items-center gap-6 text-xs">
             <Link
-              to="/coming-soon"
+              to="/org/demo"
               className="text-coloss-offwhite hover:text-white transition-colors duration-300 relative group font-medium uppercase tracking-wider font-heading"
             >
               For organizers
               <span className="absolute bottom-0 left-0 w-0 h-px bg-coloss-offwhite group-hover:w-full transition-all duration-300" />
             </Link>
             <Link
-              to="/coming-soon"
+              to="/my"
               className="text-coloss-offwhite hover:text-white transition-colors duration-300 relative group font-medium uppercase tracking-wider font-heading"
             >
               For sporters
@@ -138,7 +138,7 @@ export default function Hero({ onNavigate }: HeroProps) {
           style={{ zIndex: 11 }}
         >
           <Link
-            to="/coming-soon"
+            to="/events"
             className="px-6 py-2.5 md:px-8 md:py-3 border border-coloss-offwhite text-coloss-offwhite rounded-sm hover:border-white hover:text-white hover:bg-white/5 transition-all duration-300 text-[10px] md:text-xs font-medium tracking-wider text-center uppercase"
           >
             Discover sport moments

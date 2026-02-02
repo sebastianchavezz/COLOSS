@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, Link, useLocation } from 'react-router-dom'
-import { CheckCircle, Loader2, Calendar, MapPin, Ticket, Mail } from 'lucide-react'
+import { CheckCircle, Loader2, Calendar, MapPin, Ticket, Mail, ArrowLeft } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { QRCodeSVG } from 'qrcode.react'
 
@@ -161,6 +161,25 @@ export function PublicConfirm() {
 
     return (
         <div className="min-h-screen bg-gray-50">
+            {/* Header */}
+            <header className="bg-white border-b border-gray-200">
+                <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                    <Link
+                        to={`/events/${orderData.event.slug}`}
+                        className="flex items-center gap-2 text-gray-600 hover:text-black"
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                        <span className="text-sm font-medium">Terug naar event</span>
+                    </Link>
+                    <Link to="/" className="text-xl font-bold tracking-tight">
+                        COLOSS
+                    </Link>
+                    <Link to="/my" className="text-sm text-gray-600 hover:text-black">
+                        Mijn Account
+                    </Link>
+                </div>
+            </header>
+
             {/* Success Header */}
             <div className="bg-white shadow">
                 <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center">

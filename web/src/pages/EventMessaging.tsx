@@ -15,6 +15,7 @@ import { useOutletContext } from 'react-router-dom'
 import { MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { AppEvent } from '../types/supabase'
+import { supabase } from '../lib/supabase'
 
 type EventDetailContext = {
     event: AppEvent
@@ -75,8 +76,23 @@ export function EventMessaging() {
         setError(null)
 
         try {
-            const { data: { session } } = await (await import('../lib/supabase')).supabase.auth.getSession()
-            const token = session?.access_token
+            // Try to get fresh token - first try refresh, fallback to getSession
+            let token: string | undefined
+
+            const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession()
+            if (refreshError) {
+                console.warn('[EventMessaging] refreshSession failed, trying getSession:', refreshError.message)
+                const { data: { session } } = await supabase.auth.getSession()
+                token = session?.access_token
+            } else {
+                token = refreshedSession?.session?.access_token
+            }
+
+            console.log('[EventMessaging] Token obtained:', token ? 'yes' : 'no')
+
+            if (!token) {
+                throw new Error('Niet ingelogd - geen token beschikbaar')
+            }
 
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/get-threads?event_id=${event.id}`,
@@ -118,8 +134,9 @@ export function EventMessaging() {
         setError(null)
 
         try {
-            const { data: { session } } = await (await import('../lib/supabase')).supabase.auth.getSession()
-            const token = session?.access_token
+            // Refresh session to get fresh token (prevents 401 errors)
+            const { data: refreshedSession } = await supabase.auth.refreshSession()
+            const token = refreshedSession?.session?.access_token
 
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/get-thread-messages?thread_id=${threadId}`,
@@ -161,8 +178,9 @@ export function EventMessaging() {
         setError(null)
 
         try {
-            const { data: { session } } = await (await import('../lib/supabase')).supabase.auth.getSession()
-            const token = session?.access_token
+            // Refresh session to get fresh token (prevents 401 errors)
+            const { data: refreshedSession } = await supabase.auth.refreshSession()
+            const token = refreshedSession?.session?.access_token
 
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/send-message`,
@@ -200,8 +218,9 @@ export function EventMessaging() {
         if (!event) return
 
         try {
-            const { data: { session } } = await (await import('../lib/supabase')).supabase.auth.getSession()
-            const token = session?.access_token
+            // Refresh session to get fresh token (prevents 401 errors)
+            const { data: refreshedSession } = await supabase.auth.refreshSession()
+            const token = refreshedSession?.session?.access_token
 
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/update-thread-status`,

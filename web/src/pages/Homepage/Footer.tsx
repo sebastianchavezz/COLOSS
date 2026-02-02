@@ -2,10 +2,10 @@ import { Link } from "react-router-dom";
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-coloss-dark py-8 md:py-6">
+    <footer className="w-full bg-black py-8 md:py-6">
       <div className="max-w-7xl mx-auto px-6 md:px-8 flex items-center justify-between">
         {/* Left: COLOSS */}
-        <div className="text-coloss-muted-gray font-heading text-lg font-normal uppercase tracking-wide">
+        <div className="text-red-600 font-heading text-lg font-normal uppercase tracking-wide">
           COLOSS
         </div>
 

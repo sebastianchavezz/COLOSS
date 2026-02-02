@@ -4,7 +4,7 @@
  * Waterdichte public checkout — werkt voor zowel authenticated als guest users.
  *
  * Flow:
- * 1. Parse & validate input (event_id, items, email, purchaser_name)
+ * 1. Parse & validate input (event_id or event_slug, items, email, purchaser_name)
  * 2. Resolve user_id from optional Bearer token
  * 3. Verify event is published + within sales window
  * 4. Atomic capacity pre-check via RPC (FOR UPDATE SKIP LOCKED)
@@ -37,7 +37,8 @@ interface OrderItem {
 }
 
 interface CreateOrderPublicRequest {
-    event_id: string
+    event_id?: string
+    event_slug?: string
     items: OrderItem[]
     email: string
     purchaser_name?: string
@@ -91,10 +92,10 @@ serve(async (req: Request) => {
             return errorResponse('Invalid JSON', 'INVALID_JSON', 400)
         }
 
-        const { event_id, items, email, purchaser_name } = body
+        const { event_id, event_slug, items, email, purchaser_name } = body
 
-        if (!event_id) {
-            return errorResponse('Missing event_id', 'MISSING_EVENT_ID', 400)
+        if (!event_id && !event_slug) {
+            return errorResponse('Missing event_id or event_slug', 'MISSING_EVENT_ID', 400)
         }
         if (!items || !Array.isArray(items) || items.length === 0) {
             return errorResponse('Missing or empty items array', 'MISSING_ITEMS', 400)
@@ -118,7 +119,7 @@ serve(async (req: Request) => {
             return errorResponse('Too many items (max 20)', 'TOO_MANY_ITEMS', 400)
         }
 
-        logger.info('Input validated', { event_id, itemCount: items.length, email })
+        logger.info('Input validated', { event_id, event_slug, itemCount: items.length, email })
 
         // =================================================================
         // 2. RESOLVE USER (optional — works for both guest and authenticated)
@@ -152,16 +153,26 @@ serve(async (req: Request) => {
         // =================================================================
         // 3. VERIFY EVENT IS PUBLISHED + WITHIN SALES WINDOW
         // =================================================================
-        const { data: event, error: eventError } = await supabaseAdmin
+        let eventQuery = supabaseAdmin
             .from('events')
             .select('id, name, slug, org_id, status')
-            .eq('id', event_id)
-            .single()
+
+        // Support both event_id and event_slug
+        if (event_id) {
+            eventQuery = eventQuery.eq('id', event_id)
+        } else {
+            eventQuery = eventQuery.eq('slug', event_slug)
+        }
+
+        const { data: event, error: eventError } = await eventQuery.single()
 
         if (eventError || !event) {
-            logger.warn('Event not found', { event_id })
+            logger.warn('Event not found', { event_id, event_slug })
             return errorResponse('Event not found', 'EVENT_NOT_FOUND', 404)
         }
+
+        // Use resolved event.id for the rest of the function
+        const resolvedEventId = event.id
 
         if (event.status !== 'published') {
             return errorResponse('Event is not available for purchase', 'EVENT_NOT_PUBLISHED', 403)
@@ -179,7 +190,7 @@ serve(async (req: Request) => {
 
         const { data: capacityResult, error: capacityError } = await supabaseAdmin
             .rpc('validate_checkout_capacity', {
-                _event_id: event_id,
+                _event_id: resolvedEventId,
                 _items: itemsJsonb
             })
 
@@ -214,7 +225,7 @@ serve(async (req: Request) => {
         const { data: order, error: orderError } = await supabaseAdmin
             .from('orders')
             .insert({
-                event_id: event_id,
+                event_id: resolvedEventId,
                 org_id: event.org_id,  // Derived server-side from event
                 user_id: userId,       // null for guests
                 email: email,
@@ -282,7 +293,7 @@ serve(async (req: Request) => {
                         item_count: orderItemsPayload.length,
                         is_guest: !userId
                     },
-                    metadata: { event_id, source: 'create-order-public' }
+                    metadata: { event_id: resolvedEventId, source: 'create-order-public' }
                 })
         } catch {
             // Non-fatal: audit log failure should not block the flow
@@ -383,7 +394,7 @@ serve(async (req: Request) => {
                 metadata: {
                     order_id: order.id,
                     org_id: event.org_id,
-                    event_id: event_id,
+                    event_id: resolvedEventId,
                     user_id: userId,
                 },
             }

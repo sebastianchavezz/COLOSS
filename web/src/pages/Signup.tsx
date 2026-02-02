@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Link } from 'react-router-dom'
-import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react'
+import { Mail, Lock, User, Loader2, ArrowRight, ArrowLeft } from 'lucide-react'
 import { authHelpers } from '../lib/auth-helpers'
 
 export default function Signup() {
@@ -78,9 +78,23 @@ export default function Signup() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+            {/* Back Button */}
+            <div className="absolute top-4 left-4">
+                <Link
+                    to="/"
+                    className="flex items-center gap-2 text-gray-600 hover:text-black text-sm font-medium"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Terug
+                </Link>
+            </div>
+
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-                    Create your account
+                <Link to="/" className="block text-center text-2xl font-bold tracking-tight text-gray-900">
+                    COLOSS
+                </Link>
+                <h2 className="mt-4 text-center text-3xl font-extrabold text-gray-900">
+                    Account aanmaken
                 </h2>
                 <p className="mt-2 text-center text-sm text-gray-600">
                     Or{' '}

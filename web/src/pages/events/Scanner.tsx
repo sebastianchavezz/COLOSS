@@ -41,7 +41,7 @@ export function Scanner() {
     })
     const [networkHost, setNetworkHost] = useState(() => {
         // Load saved network host from localStorage
-        return localStorage.getItem('coloss_network_host') || '192.168.129.5:5173'
+        return localStorage.getItem('coloss_network_host') || '172.20.10.3:5174'
     })
 
     // Save network host to localStorage when it changes

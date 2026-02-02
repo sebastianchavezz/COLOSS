@@ -1,0 +1,5 @@
+export { SporterLayout } from './SporterLayout'
+export { SporterDashboard } from './SporterDashboard'
+export { MijnTickets } from './MijnTickets'
+export { MijnBerichten } from './MijnBerichten'
+export { Profiel } from './Profiel'

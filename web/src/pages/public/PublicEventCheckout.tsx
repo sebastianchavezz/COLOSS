@@ -1,24 +1,26 @@
 /**
  * PublicEventCheckout
  *
- * Public checkout pagina - geen auth vereist
+ * Checkout pagina - auth vereist
  * Route: /e/:eventSlug
  *
  * Features:
+ * - Auth required (redirect naar login als niet ingelogd)
+ * - Email automatisch van ingelogde user
  * - Toon event details
  * - Lijst published tickets met real-time availability
  * - Sold out states + max per participant limits
- * - Checkout form (email + optionele naam)
  * - Pre-checkout validation via RPC
  * - Call create-order-public Edge Function
- * - Redirect naar confirmation page
+ * - Redirect naar Mollie of confirmation page
  */
 
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { Calendar, MapPin, Ticket, Loader2, ShoppingCart, AlertCircle } from 'lucide-react'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
+import { Calendar, MapPin, Ticket, Loader2, ShoppingCart, AlertCircle, ArrowLeft } from 'lucide-react'
 import { getPublicEventBySlug } from '../../data/public_events'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 
 // Ticket type with availability info from RPC
 interface TicketWithAvailability {
@@ -59,6 +61,8 @@ interface ValidationError {
 export function PublicEventCheckout() {
     const { eventSlug } = useParams<{ eventSlug: string }>()
     const navigate = useNavigate()
+    const location = useLocation()
+    const { user, loading: authLoading } = useAuth()
 
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -66,11 +70,15 @@ export function PublicEventCheckout() {
     const [event, setEvent] = useState<any>(null)
     const [tickets, setTickets] = useState<TicketWithAvailability[]>([])
     const [quantities, setQuantities] = useState<Record<string, number>>({})
-    const [email, setEmail] = useState('')
-    const [name, setName] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [validating, setValidating] = useState(false)
-    const [showCheckout, setShowCheckout] = useState(false)
+
+    // Redirect to login if not authenticated
+    useEffect(() => {
+        if (!authLoading && !user) {
+            navigate('/login', { state: { from: location }, replace: true })
+        }
+    }, [user, authLoading, navigate, location])
 
     useEffect(() => {
         async function fetchEvent() {
@@ -243,11 +251,9 @@ export function PublicEventCheckout() {
         }
     }
 
-    const handleCheckout = async (e: React.FormEvent) => {
-        e.preventDefault()
-
-        if (!email) {
-            setError('Email is verplicht')
+    const handleCheckout = async () => {
+        if (!user) {
+            navigate('/login', { state: { from: location }, replace: true })
             return
         }
 
@@ -276,13 +282,13 @@ export function PublicEventCheckout() {
                     quantity: qty
                 }))
 
-            // Call Edge Function
+            // Call Edge Function with user email
             const { data, error: createError } = await supabase.functions.invoke('create-order-public', {
                 body: {
                     event_slug: eventSlug,
                     items,
-                    email,
-                    purchaser_name: name || null,
+                    email: user.email,
+                    purchaser_name: user.user_metadata?.full_name || null,
                 }
             })
 
@@ -291,8 +297,14 @@ export function PublicEventCheckout() {
                 throw new Error(createError.message)
             }
 
+            // If there's a checkout URL (paid order), redirect to Mollie
+            if (data?.checkout_url) {
+                window.location.href = data.checkout_url
+                return
+            }
+
+            // Free order - redirect to confirmation
             if (data?.public_token) {
-                // Redirect to confirmation with state (containing raw tickets)
                 navigate(`/e/${eventSlug}/confirm?token=${data.public_token}`, {
                     state: {
                         tickets: data.tickets,
@@ -310,12 +322,17 @@ export function PublicEventCheckout() {
         setSubmitting(false)
     }
 
-    if (loading) {
+    if (loading || authLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
             </div>
         )
+    }
+
+    // Don't render if not authenticated (will redirect)
+    if (!user) {
+        return null
     }
 
     if (error && !event) {
@@ -332,7 +349,23 @@ export function PublicEventCheckout() {
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
-            <div className="bg-white shadow">
+            <header className="bg-white border-b border-gray-200">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                    <Link to="/events" className="flex items-center gap-2 text-gray-600 hover:text-black">
+                        <ArrowLeft className="h-5 w-5" />
+                        <span className="text-sm font-medium">Terug naar events</span>
+                    </Link>
+                    <Link to="/" className="text-xl font-bold tracking-tight">
+                        COLOSS
+                    </Link>
+                    <Link to="/my" className="text-sm text-gray-600 hover:text-black">
+                        Mijn Account
+                    </Link>
+                </div>
+            </header>
+
+            {/* Event Info */}
+            <div className="bg-white border-b border-gray-100">
                 <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
                     <h1 className="text-3xl font-bold text-gray-900">{event?.name}</h1>
                     <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
@@ -474,80 +507,51 @@ export function PublicEventCheckout() {
                                 </div>
                             </div>
 
-                            {!showCheckout ? (
-                                <button
-                                    onClick={() => setShowCheckout(true)}
-                                    disabled={totalItems === 0}
-                                    className="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <ShoppingCart className="inline mr-2 h-4 w-4" />
-                                    Verder naar checkout
-                                </button>
-                            ) : (
-                                <form onSubmit={handleCheckout} className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Email <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            placeholder="jouw@email.nl"
-                                            required
-                                            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Naam (optioneel)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={name}
-                                            onChange={(e) => setName(e.target.value)}
-                                            placeholder="Voor- en achternaam"
-                                            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                        />
-                                    </div>
-
-                                    {/* Validation errors */}
-                                    {validationErrors.length > 0 && (
-                                        <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                                            <div className="flex items-start">
-                                                <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
-                                                <div className="text-sm text-red-800">
-                                                    {validationErrors.map((err, idx) => (
-                                                        <p key={idx}>{translateError(err)}</p>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {error && (
-                                        <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                                            <p className="text-sm text-red-800">{error}</p>
-                                        </div>
-                                    )}
-
-                                    <button
-                                        type="submit"
-                                        disabled={submitting || validating || !email || totalItems === 0}
-                                        className="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {submitting || validating ? (
-                                            <>
-                                                <Loader2 className="inline animate-spin mr-2 h-4 w-4" />
-                                                {validating ? 'Valideren...' : 'Bezig met bestellen...'}
-                                            </>
-                                        ) : (
-                                            'Bestelling plaatsen'
-                                        )}
-                                    </button>
-                                </form>
+                            {/* User info */}
+                            {user && (
+                                <div className="mb-4 p-3 bg-gray-50 rounded-md">
+                                    <p className="text-xs text-gray-500 mb-1">Ingelogd als</p>
+                                    <p className="text-sm font-medium text-gray-900">{user.email}</p>
+                                </div>
                             )}
+
+                            {/* Validation errors */}
+                            {validationErrors.length > 0 && (
+                                <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+                                    <div className="flex items-start">
+                                        <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
+                                        <div className="text-sm text-red-800">
+                                            {validationErrors.map((err, idx) => (
+                                                <p key={idx}>{translateError(err)}</p>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {error && (
+                                <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+                                    <p className="text-sm text-red-800">{error}</p>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleCheckout}
+                                disabled={submitting || validating || totalItems === 0}
+                                className="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {submitting || validating ? (
+                                    <>
+                                        <Loader2 className="inline animate-spin mr-2 h-4 w-4" />
+                                        {validating ? 'Valideren...' : 'Bezig met bestellen...'}
+                                    </>
+                                ) : (
+                                    <>
+                                        <ShoppingCart className="inline mr-2 h-4 w-4" />
+                                        {totalPrice === 0 ? 'Gratis bestellen' : 'Afrekenen'}
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>

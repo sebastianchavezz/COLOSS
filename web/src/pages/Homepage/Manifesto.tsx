@@ -44,18 +44,18 @@ export default function Manifesto() {
         }
       `}</style>
       <div
-        className="max-w-2xl mx-auto px-6 md:px-8 manifesto-content manifesto-text visible"
+        className="w-full mx-auto px-6 md:px-12 lg:px-20 manifesto-content manifesto-text visible"
         style={{ color: `rgba(44, 52, 70, ${textOpacity})` }}
       >
         <h2
-          className="font-heading text-xl md:text-2xl font-bold mb-6 md:mb-8 leading-tight"
+          className="font-elegant text-2xl md:text-4xl lg:text-5xl font-light mb-8 md:mb-12 leading-tight tracking-wide italic"
           style={{ opacity: textOpacity, transition: 'opacity 0.6s ease-out' }}
         >
           COLOSS exists as a space between who you are and who you can become.
         </h2>
 
         <div
-          className="space-y-4 md:space-y-6 text-sm md:text-base leading-relaxed"
+          className="font-elegant space-y-6 md:space-y-8 text-lg md:text-xl lg:text-2xl leading-relaxed font-light tracking-wide"
           style={{ opacity: textOpacity * 0.95, transition: 'opacity 0.6s ease-out' }}
         >
           <p>

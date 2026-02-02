@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { PublicHeader } from '../../components/PublicHeader'
 import { Search, MapPin, Calendar, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface EventListItem {
@@ -104,11 +105,13 @@ export function PublicEvents() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white shadow">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <h1 className="text-3xl font-bold text-gray-900">Discover Events</h1>
-                    <p className="mt-2 text-gray-600">Find your next adventure</p>
+            <PublicHeader />
+
+            {/* Page Header */}
+            <div className="bg-white border-b border-gray-100">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <h1 className="text-3xl font-bold text-gray-900">Ontdek Events</h1>
+                    <p className="mt-2 text-gray-600">Vind je volgende sportavontuur</p>
                 </div>
             </div>
 

@@ -10,7 +10,6 @@ import { Link } from 'react-router-dom'
 import {
   CalendarDays,
   Ticket,
-  Users,
   CheckCircle,
   TrendingUp,
   Clock,

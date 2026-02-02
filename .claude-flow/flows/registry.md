@@ -21,6 +21,7 @@
 | F012 | Event Communication (Messaging + FAQ) | 🟢 | 3/3 | S3 Open Chat | ✅ |
 | F013 | Invitation System | 🟢 | 1/1 | Done | ✅ |
 | F014 | Team Management (RBAC) | 🟢 | 1/1 | Done | ✅ |
+| F015 | Products (Upgrades & Merchandise) | 🟢 | 2/2 | Done | ✅ |
 
 ## Status Legend
 
@@ -35,10 +36,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Flows | 14 |
+| Total Flows | 15 |
 | 🔴 Planned | 0 |
 | 🟡 Active | 2 |
-| 🟢 Done | 12 |
+| 🟢 Done | 13 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
@@ -60,7 +61,9 @@ F001 (User Registration)
   │      │      │                    │
   │      │      │                    ├──► F009 (Refund) ✅
   │      │      │                    │
-  │      │      │                    └──► F011 (Participants/Registrations) ✅
+  │      │      │                    ├──► F011 (Participants/Registrations) ✅
+  │      │      │                    │
+  │      │      │                    └──► F015 (Products) ✅
   │      │      │
   │      │      └──► F010 (Organizer Dashboard)
   │      │
@@ -82,6 +85,7 @@ F001 (User Registration)
 | 3 | Discovery | F004, F005 | 🟢 Complete |
 | 4 | Checkout | F006, F007 | 🟡 Partial (F007 S2 done) |
 | 5 | Support | F008, F009 | 🟢 Complete |
+| 6 | Products | F015 | 🟢 Complete |
 
 ## Directory Structure
 

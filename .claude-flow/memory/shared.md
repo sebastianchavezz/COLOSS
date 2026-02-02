@@ -10,8 +10,8 @@
 
 ## Current State
 
-- **Sprint**: F003 Event Creation - COMPLETED
-- **Phase**: done
+- **Sprint**: F015 Products Module - COMPLETED
+- **Phase**: S1 + S2 done
 - **Blockers**: none
 
 ## Architecture Layers
@@ -59,6 +59,12 @@
 - `chat_thread_reads` - Read receipts for organizers (UPSERT idempotent)
 - `faq_items` - FAQ entries (org-wide or event-specific), status: draft/published
 
+### Products Tables (F015 - Products Module)
+- `products` - Extra producten (ticket_upgrade of standalone), met prijzen, capaciteit, sales window
+- `product_variants` - Varianten per product (maten, kleuren) met eigen capaciteit
+- `product_ticket_restrictions` - Junction table: welke tickets mogen welke products kopen
+- `order_items` - Extended met product_id en product_variant_id
+
 ## Key Decisions
 
 | Date | Decision | Rationale |
@@ -67,6 +73,7 @@
 | 2025-01-27 | Multi-tenant via org_id | Isolatie per organisatie |
 | 2025-01-27 | Supabase Auth | Native integratie |
 | 2026-01-28 | F003 All sprints complete | Event CRUD + Settings + GPX Routes |
+| 2026-02-02 | F015 S1 Products data layer | Products, variants, ticket restrictions |
 
 ## Completed Features
 
@@ -104,6 +111,22 @@
   - [x] Edge Functions: send-message, get-threads, get-thread-messages, update-thread-status, faq-crud, get-faqs
   - [x] Helper RPCs: get_or_create_chat_thread, mark_chat_thread_read, check_participant_event_access, get_messaging_settings, count_recent_participant_messages
   - [x] Full RLS: participant sees own thread, organizer sees org threads, public reads published FAQs
+- [x] **Products Module** (F015 - Complete)
+  - [x] S1: Products table (ticket_upgrade + standalone categories)
+  - [x] S1: Product variants (sizes, colors with capacity)
+  - [x] S1: Ticket restrictions (which tickets can buy which products)
+  - [x] S1: Sales windows + capacity tracking
+  - [x] S1: Extended order_items for products
+  - [x] S1: 8 RPCs: create_product, update_product, delete_product, get_public_products, variant CRUD, set_restrictions
+  - [x] S1: Views: v_product_stats, v_product_variant_stats
+  - [x] S1: Full RLS: public view, org member view, admin manage
+  - [x] S1: TypeScript types in web/src/types/products.ts
+  - [x] S2: Product management UI in Organizer OS (EventProducts.tsx)
+  - [x] S2: Product cards with image, price, status badges
+  - [x] S2: Create/Edit modal with tabs (Basisinfo, Prijzen, Varianten, Beperkingen)
+  - [x] S2: Variant management (add/delete)
+  - [x] S2: Ticket restrictions for upgrades
+  - [x] S2: Data layer (web/src/data/products.ts)
 
 ## Known Issues
 
@@ -127,18 +150,19 @@
 | F010 | 🟡 In Progress | 67% | S1+S2 done, S3 pending |
 | F011 | 🟢 Completed | 100% | - |
 | F012 | 🟢 Completed | 100% | - |
+| F015 | 🟢 Completed | 100% | - |
 
 ### Upcoming Flows
 - F007 S3: Ticket Delivery (Email delivery + PDF)
-- F010: Organizer Dashboard
+- F010 S3: Organizer Dashboard Reports
 
 ---
 
 ## Next Actions
 
 1. Continue F007 S3: Email delivery + PDF tickets
-2. Continue F010 S2: Participant management + Export
-3. F010 S3: Reports (pending financing module)
+2. F010 S3: Reports (pending financing module)
+3. Checkout integration for products (extend create-order-public)
 
 ---
 

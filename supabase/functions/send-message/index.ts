@@ -367,7 +367,7 @@ serve(async (req: Request) => {
             logger.info('Message sent by participant', { messageId: message.id, threadId: activeThreadId })
 
             // Audit log (non-fatal)
-            await supabaseAdmin
+            const { error: auditError1 } = await supabaseAdmin
                 .from('audit_log')
                 .insert({
                     org_id: threadRecord.org_id,
@@ -383,7 +383,7 @@ serve(async (req: Request) => {
                     },
                     metadata: { event_id, source: 'send-message' }
                 })
-                .catch(() => logger.warn('Audit log insert failed (non-fatal)'))
+            if (auditError1) logger.warn('Audit log insert failed (non-fatal)')
 
             return jsonResponse({
                 success: true,
@@ -476,7 +476,7 @@ serve(async (req: Request) => {
             logger.info('Message sent by organizer', { messageId: message.id, threadId: thread_id })
 
             // Audit log (non-fatal)
-            await supabaseAdmin
+            const { error: auditError2 } = await supabaseAdmin
                 .from('audit_log')
                 .insert({
                     org_id: threadRecord.org_id,
@@ -491,7 +491,10 @@ serve(async (req: Request) => {
                     },
                     metadata: { event_id: threadRecord.event_id, source: 'send-message' }
                 })
-                .catch(() => logger.warn('Audit log insert failed (non-fatal)'))
+
+            if (auditError2) {
+                logger.warn('Audit log insert failed (non-fatal)')
+            }
 
             return jsonResponse({
                 success: true,
