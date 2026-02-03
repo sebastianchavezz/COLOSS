@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { useOutletContext, Link } from 'react-router-dom'
+import { useOutletContext, Link, useSearchParams } from 'react-router-dom'
 import {
     Users,
     QrCode,
@@ -27,11 +27,13 @@ import {
     FileSpreadsheet,
     CheckSquare,
     Square,
-    X
+    X,
+    Eye
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import type { AppEvent, Organization } from '../types/supabase'
+import { ParticipantProfile } from '../components/participants/ParticipantProfile'
 
 // Context type from EventDetail
 interface EventContext {
@@ -95,7 +97,19 @@ interface ListResponse {
 }
 
 export function EventParticipants() {
-    const { event } = useOutletContext<EventContext>()
+    const { event, org } = useOutletContext<EventContext>()
+    const [searchParams, setSearchParams] = useSearchParams()
+
+    // Profile sidebar state
+    const selectedProfileId = searchParams.get('profile')
+
+    const openProfile = (participantId: string) => {
+        setSearchParams({ profile: participantId })
+    }
+
+    const closeProfile = () => {
+        setSearchParams({})
+    }
 
     // Data state
     const [registrations, setRegistrations] = useState<RegistrationRow[]>([])
@@ -611,6 +625,9 @@ export function EventParticipants() {
                                     <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                                         Datum
                                     </th>
+                                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        Acties
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-white">
@@ -660,6 +677,15 @@ export function EventParticipants() {
                                                 month: 'short',
                                                 year: 'numeric'
                                             })}
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
+                                            <button
+                                                onClick={() => openProfile(reg.participant_id)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded"
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                                Bekijk
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -717,6 +743,18 @@ export function EventParticipants() {
                         </div>
                     )}
                 </>
+            )}
+
+            {/* Participant Profile Sidebar */}
+            {selectedProfileId && event && org && (
+                <ParticipantProfile
+                    participantId={selectedProfileId}
+                    eventId={event.id}
+                    eventSlug={event.slug}
+                    orgSlug={org.slug}
+                    onClose={closeProfile}
+                    onUpdate={fetchRegistrations}
+                />
             )}
         </div>
     )

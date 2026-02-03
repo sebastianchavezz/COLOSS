@@ -1,20 +1,23 @@
 /**
  * EventMessaging Page (Organizer View)
  *
+ * UPGRADED with real-time messaging best practices:
+ * - Supabase Realtime subscriptions for instant updates
+ * - Optimistic UI updates for immediate feedback
+ * - Token caching (no refresh per API call)
+ * - Connection status indicator
+ *
  * Two-panel layout:
  * - Left: Thread list (participants, status, unread count)
  * - Right: Message thread with reply input
- *
- * Threads are fetched from get-threads Edge Function.
- * Messages are fetched from get-thread-messages.
- * Replies are sent via send-message.
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useOutletContext } from 'react-router-dom'
-import { MessageSquare } from 'lucide-react'
+import { useOutletContext, useSearchParams, useNavigate } from 'react-router-dom'
+import { MessageSquare, Wifi, WifiOff, RefreshCw, User } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { AppEvent } from '../types/supabase'
+import { useRealtimeMessages, useRealtimeThreads, type Message, type Thread } from '../hooks/useRealtimeMessages'
 import { supabase } from '../lib/supabase'
 
 type EventDetailContext = {
@@ -23,205 +26,130 @@ type EventDetailContext = {
     refreshEvent: () => void
 }
 
-interface Thread {
-    id: string
-    participant_id: string
-    participant_name: string
-    participant_email: string
-    status: 'open' | 'pending' | 'closed'
-    last_message_at: string
-    last_message_preview: string
-    unread_count: number
-}
-
-interface Message {
-    id: string
-    thread_id: string
-    sender_type: 'participant' | 'organizer'
-    sender_name: string
-    content: string
-    created_at: string
-}
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-
 export function EventMessaging() {
-    const { event } = useOutletContext<EventDetailContext>()
-    const [threads, setThreads] = useState<Thread[]>([])
+    const { event, org } = useOutletContext<EventDetailContext>()
+    const [searchParams, setSearchParams] = useSearchParams()
+    const navigate = useNavigate()
     const [selectedThread, setSelectedThread] = useState<Thread | null>(null)
-    const [messages, setMessages] = useState<Message[]>([])
-    const [loading, setLoading] = useState(true)
-    const [threadLoading, setThreadLoading] = useState(false)
-    const [sending, setSending] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+
+    // Handle thread URL parameter (from profile "Stuur bericht")
+    const threadIdFromUrl = searchParams.get('thread')
     const [replyText, setReplyText] = useState('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'pending' | 'closed'>('all')
+    const [sending, setSending] = useState(false)
+    const [sendError, setSendError] = useState<string | null>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
-    // Fetch threads on mount
-    useEffect(() => {
-        if (!event) return
-        fetchThreads()
-    }, [event?.id])
+    // Real-time threads subscription
+    const {
+        threads,
+        loading: threadsLoading,
+        error: threadsError,
+        refreshThreads,
+        totalUnread,
+        connectionStatus: threadsConnectionStatus,
+    } = useRealtimeThreads({
+        eventId: event?.id || '',
+        enabled: !!event?.id,
+    })
+
+    // Real-time messages subscription (for selected thread)
+    const {
+        messages,
+        loading: messagesLoading,
+        loadingMore,
+        error: messagesError,
+        sendMessage,
+        loadOlderMessages,
+        connectionStatus: messagesConnectionStatus,
+        pagination,
+    } = useRealtimeMessages({
+        threadId: selectedThread?.id || null,
+        eventId: event?.id || '',
+        enabled: !!selectedThread?.id,
+    })
 
     // Auto-scroll messages to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
-    // Fetch threads list
-    const fetchThreads = useCallback(async () => {
-        if (!event) return
-        setLoading(true)
-        setError(null)
-
-        try {
-            // Try to get fresh token - first try refresh, fallback to getSession
-            let token: string | undefined
-
-            const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession()
-            if (refreshError) {
-                console.warn('[EventMessaging] refreshSession failed, trying getSession:', refreshError.message)
-                const { data: { session } } = await supabase.auth.getSession()
-                token = session?.access_token
-            } else {
-                token = refreshedSession?.session?.access_token
+    // Auto-select thread from URL parameter (from profile "Stuur bericht")
+    useEffect(() => {
+        if (threadIdFromUrl && threads.length > 0) {
+            const thread = threads.find(t => t.id === threadIdFromUrl)
+            if (thread) {
+                handleSelectThread(thread)
+                // Clear URL param after selecting (optional, keeps URL clean)
+                setSearchParams({})
             }
-
-            console.log('[EventMessaging] Token obtained:', token ? 'yes' : 'no')
-
-            if (!token) {
-                throw new Error('Niet ingelogd - geen token beschikbaar')
-            }
-
-            const response = await fetch(
-                `${SUPABASE_URL}/functions/v1/get-threads?event_id=${event.id}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            )
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
-                const errorMsg = errorData.details || errorData.error || `Failed to fetch threads: ${response.statusText}`
-                throw new Error(errorMsg)
-            }
-
-            const data = await response.json()
-            const threadsList = data.threads || []
-            setThreads(threadsList)
-
-            // Auto-select first thread
-            if (threadsList.length > 0 && !selectedThread) {
-                setSelectedThread(threadsList[0])
-                fetchMessages(threadsList[0].id)
-            }
-        } catch (err: any) {
-            console.error('[EventMessaging] Error fetching threads:', err)
-            setError(err.message || 'Fout bij laden threads')
-        } finally {
-            setLoading(false)
         }
-    }, [event?.id, selectedThread])
+    }, [threadIdFromUrl, threads])
 
-    // Fetch messages for selected thread
-    const fetchMessages = useCallback(async (threadId: string) => {
-        setThreadLoading(true)
-        setError(null)
-
-        try {
-            // Refresh session to get fresh token (prevents 401 errors)
-            const { data: refreshedSession } = await supabase.auth.refreshSession()
-            const token = refreshedSession?.session?.access_token
-
-            const response = await fetch(
-                `${SUPABASE_URL}/functions/v1/get-thread-messages?thread_id=${threadId}`,
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            )
-
-            if (!response.ok) {
-                throw new Error(`Failed to fetch messages: ${response.statusText}`)
-            }
-
-            const data = await response.json()
-            setMessages(data.messages || [])
-        } catch (err: any) {
-            console.error('[EventMessaging] Error fetching messages:', err)
-            setError(err.message || 'Fout bij laden berichten')
-        } finally {
-            setThreadLoading(false)
+    // Auto-select first thread when loaded (only if no URL param)
+    useEffect(() => {
+        if (threads.length > 0 && !selectedThread && !threadIdFromUrl) {
+            setSelectedThread(threads[0])
         }
-    }, [])
+    }, [threads, selectedThread, threadIdFromUrl])
 
-    // Handle thread selection
-    const handleSelectThread = (thread: Thread) => {
+    // Handle thread selection - mark as read when opened (best practice)
+    const handleSelectThread = async (thread: Thread) => {
         setSelectedThread(thread)
         setReplyText('')
-        fetchMessages(thread.id)
+        setSendError(null)
+
+        // Mark thread as read (optimistic UI update)
+        if (thread.unread_count > 0) {
+            // Optimistic: update local state immediately
+            refreshThreads()
+
+            // Call RPC to mark as read in database
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                    await supabase.rpc('mark_chat_thread_read', {
+                        _thread_id: thread.id,
+                        _reader_user_id: user.id
+                    })
+                    // Refresh to sync with server state
+                    refreshThreads()
+                }
+            } catch (err) {
+                console.error('[EventMessaging] Failed to mark thread as read:', err)
+            }
+        }
     }
 
-    // Send reply
+    // Send reply with optimistic update
     const handleSendReply = async () => {
-        if (!selectedThread || !replyText.trim() || !event) return
+        if (!selectedThread || !replyText.trim() || !event || sending) return
 
         setSending(true)
-        setError(null)
+        setSendError(null)
 
-        try {
-            // Refresh session to get fresh token (prevents 401 errors)
-            const { data: refreshedSession } = await supabase.auth.refreshSession()
-            const token = refreshedSession?.session?.access_token
+        const result = await sendMessage(replyText.trim())
 
-            const response = await fetch(
-                `${SUPABASE_URL}/functions/v1/send-message`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        thread_id: selectedThread.id,
-                        event_id: event.id,
-                        content: replyText.trim(),
-                    }),
-                }
-            )
-
-            if (!response.ok) {
-                throw new Error(`Failed to send message: ${response.statusText}`)
-            }
-
+        if (result.success) {
             setReplyText('')
-            await fetchMessages(selectedThread.id)
-            await fetchThreads()
-        } catch (err: any) {
-            console.error('[EventMessaging] Error sending message:', err)
-            setError(err.message || 'Fout bij verzenden bericht')
-        } finally {
-            setSending(false)
+            // Refresh threads to update last_message_preview
+            refreshThreads()
+        } else {
+            setSendError(result.error || 'Verzenden mislukt')
         }
+
+        setSending(false)
     }
 
     // Update thread status
-    const handleUpdateStatus = async (threadId: string, newStatus: 'open' | 'pending' | 'closed') => {
+    const handleUpdateStatus = useCallback(async (threadId: string, newStatus: 'open' | 'pending' | 'closed') => {
         if (!event) return
 
         try {
-            // Refresh session to get fresh token (prevents 401 errors)
-            const { data: refreshedSession } = await supabase.auth.refreshSession()
-            const token = refreshedSession?.session?.access_token
+            const { data: { session } } = await (await import('../lib/supabase')).supabase.auth.getSession()
+            const token = session?.access_token
 
+            const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
             const response = await fetch(
                 `${SUPABASE_URL}/functions/v1/update-thread-status`,
                 {
@@ -241,15 +169,21 @@ export function EventMessaging() {
                 throw new Error(`Failed to update status: ${response.statusText}`)
             }
 
-            await fetchThreads()
+            // Update local state immediately (optimistic)
             if (selectedThread?.id === threadId) {
-                const updated = threads.find(t => t.id === threadId)
-                if (updated) setSelectedThread(updated)
+                setSelectedThread({ ...selectedThread, status: newStatus })
             }
+
+            // Realtime will handle the full update
         } catch (err: any) {
             console.error('[EventMessaging] Error updating status:', err)
-            setError(err.message || 'Fout bij bijwerken status')
+            setSendError(err.message || 'Fout bij bijwerken status')
         }
+    }, [event, selectedThread])
+
+    // Navigate to participant profile
+    const handleOpenProfile = (participantId: string) => {
+        navigate(`/org/${org.slug}/events/${event.slug}/participants?profile=${participantId}`)
     }
 
     // Filter threads
@@ -257,13 +191,14 @@ export function EventMessaging() {
         ? threads
         : threads.filter(t => t.status === statusFilter)
 
-    const totalUnread = threads.reduce((sum, t) => sum + t.unread_count, 0)
+    // Connection status indicator
+    const isConnected = threadsConnectionStatus === 'connected' && messagesConnectionStatus === 'connected'
 
     if (!event) {
-        return <div className="p-4 text-gray-500">Event laden...</div>
+        return <div className="p-4 text-gray-500 dark:text-gray-400">Event laden...</div>
     }
 
-    if (loading) {
+    if (threadsLoading) {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
@@ -276,38 +211,54 @@ export function EventMessaging() {
             <div className="mb-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <MessageSquare className="h-6 w-6 text-indigo-600" />
                             Berichten
+                            {/* Connection indicator */}
+                            {isConnected ? (
+                                <Wifi className="h-4 w-4 text-green-500" title="Real-time verbonden" />
+                            ) : (
+                                <WifiOff className="h-4 w-4 text-yellow-500" title="Geen real-time verbinding" />
+                            )}
                         </h1>
-                        <p className="mt-1 text-sm text-gray-600">
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                             Beantwoord vragen van deelnemers
+                            {isConnected && <span className="ml-2 text-green-600 text-xs">(live)</span>}
                         </p>
                     </div>
-                    {totalUnread > 0 && (
-                        <div className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
-                            {totalUnread} ongelezen
-                        </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={refreshThreads}
+                            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            title="Vernieuwen"
+                        >
+                            <RefreshCw className="h-5 w-5" />
+                        </button>
+                        {totalUnread > 0 && (
+                            <div className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-3 py-1 rounded-full text-sm font-medium">
+                                {totalUnread} ongelezen
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {error && (
-                <div className="mb-4 bg-red-50 border-l-4 border-red-400 p-4 text-red-700">
-                    {error}
+            {(threadsError || sendError) && (
+                <div className="mb-4 bg-red-50 dark:bg-red-900/50 border-l-4 border-red-400 p-4 text-red-700 dark:text-red-200">
+                    {threadsError || sendError}
                 </div>
             )}
 
-            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden h-[calc(100vh-300px)] flex">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden h-[calc(100vh-300px)] flex">
                 {/* Left Panel: Threads */}
-                <div className="w-80 border-r border-gray-200 flex flex-col">
+                <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col">
                     {/* Status Filter */}
-                    <div className="p-4 border-b border-gray-200 space-y-2">
-                        <label className="text-xs font-medium text-gray-700">Filter op status</label>
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-2">
+                        <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Filter op status</label>
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value as any)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         >
                             <option value="all">Alle statussen</option>
                             <option value="open">Open</option>
@@ -319,7 +270,7 @@ export function EventMessaging() {
                     {/* Threads List */}
                     <div className="flex-1 overflow-y-auto">
                         {filteredThreads.length === 0 ? (
-                            <div className="p-4 text-center text-gray-500 text-sm">
+                            <div className="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">
                                 Geen threads gevonden
                             </div>
                         ) : (
@@ -328,32 +279,42 @@ export function EventMessaging() {
                                     key={thread.id}
                                     onClick={() => handleSelectThread(thread)}
                                     className={clsx(
-                                        'w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors',
-                                        selectedThread?.id === thread.id && 'bg-indigo-50 border-l-4 border-l-indigo-600'
+                                        'w-full text-left px-4 py-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group',
+                                        selectedThread?.id === thread.id && 'bg-indigo-50 dark:bg-indigo-900/50 border-l-4 border-l-indigo-600'
                                     )}
                                 >
                                     <div className="flex items-start justify-between mb-1">
-                                        <div className="font-medium text-sm text-gray-900 flex-1 truncate">
+                                        <div className="font-medium text-sm text-gray-900 dark:text-white flex-1 truncate flex items-center gap-1">
                                             {thread.participant_name}
+                                            <span
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleOpenProfile(thread.participant_id)
+                                                }}
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-opacity"
+                                                title="Bekijk profiel"
+                                            >
+                                                <User className="h-3 w-3" />
+                                            </span>
                                         </div>
                                         {thread.unread_count > 0 && (
-                                            <span className="ml-2 inline-block bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">
+                                            <span className="ml-2 inline-flex items-center justify-center bg-red-500 text-white rounded-full w-5 h-5 text-xs">
                                                 {thread.unread_count}
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-xs text-gray-500 truncate">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                         {thread.participant_email}
                                     </p>
-                                    <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 line-clamp-2">
                                         {thread.last_message_preview}
                                     </p>
                                     <div className="flex items-center justify-between mt-2">
                                         <span className={clsx(
                                             'text-xs font-medium px-2 py-1 rounded',
-                                            thread.status === 'open' && 'bg-blue-100 text-blue-800',
-                                            thread.status === 'pending' && 'bg-yellow-100 text-yellow-800',
-                                            thread.status === 'closed' && 'bg-gray-100 text-gray-800'
+                                            thread.status === 'open' && 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+                                            thread.status === 'pending' && 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+                                            thread.status === 'closed' && 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                                         )}>
                                             {thread.status === 'open' && 'Open'}
                                             {thread.status === 'pending' && 'In afwachting'}
@@ -377,20 +338,25 @@ export function EventMessaging() {
                     {selectedThread ? (
                         <>
                             {/* Thread Header */}
-                            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                                <div>
-                                    <h2 className="font-medium text-gray-900">
+                            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                <button
+                                    onClick={() => handleOpenProfile(selectedThread.participant_id)}
+                                    className="text-left hover:bg-gray-50 dark:hover:bg-gray-700 p-2 -m-2 rounded-lg transition-colors group"
+                                    title="Bekijk profiel"
+                                >
+                                    <h2 className="font-medium text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 flex items-center gap-2">
                                         {selectedThread.participant_name}
+                                        <User className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </h2>
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
                                         {selectedThread.participant_email}
                                     </p>
-                                </div>
+                                </button>
                                 <div className="flex items-center gap-2">
                                     <select
                                         value={selectedThread.status}
                                         onChange={(e) => handleUpdateStatus(selectedThread.id, e.target.value as any)}
-                                        className="px-2 py-1 text-sm border border-gray-300 rounded"
+                                        className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                     >
                                         <option value="open">Open</option>
                                         <option value="pending">In afwachting</option>
@@ -400,17 +366,30 @@ export function EventMessaging() {
                             </div>
 
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                {threadLoading ? (
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
+                                {messagesLoading ? (
                                     <div className="flex items-center justify-center h-32">
                                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
                                     </div>
                                 ) : messages.length === 0 ? (
-                                    <div className="text-center text-gray-500 py-8">
+                                    <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                                         Geen berichten
                                     </div>
                                 ) : (
-                                    messages.map((message) => (
+                                    <>
+                                    {/* Load older messages button */}
+                                    {pagination.hasMoreBefore && (
+                                        <div className="text-center py-2">
+                                            <button
+                                                onClick={loadOlderMessages}
+                                                disabled={loadingMore}
+                                                className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
+                                            >
+                                                {loadingMore ? 'Laden...' : `Oudere berichten laden (${pagination.totalCount - messages.length} meer)`}
+                                            </button>
+                                        </div>
+                                    )}
+                                    {messages.map((message) => (
                                         <div
                                             key={message.id}
                                             className={clsx(
@@ -422,39 +401,64 @@ export function EventMessaging() {
                                                 'flex-1 max-w-xs',
                                                 message.sender_type === 'organizer' && 'text-right'
                                             )}>
+                                                {/* Sender name */}
+                                                <p className={clsx(
+                                                    'text-xs font-medium mb-1',
+                                                    message.sender_type === 'organizer'
+                                                        ? 'text-indigo-600 dark:text-indigo-400'
+                                                        : 'text-gray-700 dark:text-gray-300'
+                                                )}>
+                                                    {message.sender_type === 'organizer' ? 'Jij' : (selectedThread.participant_name || 'Deelnemer')}
+                                                </p>
                                                 <div className={clsx(
                                                     'inline-block px-4 py-2 rounded-lg',
                                                     message.sender_type === 'organizer'
                                                         ? 'bg-indigo-600 text-white'
-                                                        : 'bg-gray-100 text-gray-900'
+                                                        : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm',
+                                                    message._optimistic && 'opacity-70'
                                                 )}>
                                                     <p className="text-sm">{message.content}</p>
                                                 </div>
                                                 <p className={clsx(
-                                                    'text-xs text-gray-500 mt-1',
+                                                    'text-xs text-gray-500 dark:text-gray-400 mt-1',
                                                     message.sender_type === 'organizer' && 'text-right'
                                                 )}>
-                                                    {new Date(message.created_at).toLocaleTimeString('nl-NL', {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
+                                                    {message._optimistic ? (
+                                                        <span className="text-yellow-600">Verzenden...</span>
+                                                    ) : (
+                                                        new Date(message.created_at).toLocaleTimeString('nl-NL', {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>
-                                    ))
+                                    ))}
+                                    </>
                                 )}
                                 <div ref={messagesEndRef} />
                             </div>
 
                             {/* Reply Input */}
-                            <div className="p-4 border-t border-gray-200">
+                            <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                                {messagesError && (
+                                    <div className="mb-2 text-sm text-red-600 dark:text-red-400">
+                                        {messagesError}
+                                    </div>
+                                )}
                                 <div className="flex gap-2">
                                     <textarea
                                         value={replyText}
                                         onChange={(e) => setReplyText(e.target.value)}
-                                        placeholder="Typ je antwoord..."
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && e.ctrlKey && !sending && replyText.trim()) {
+                                                handleSendReply()
+                                            }
+                                        }}
+                                        placeholder="Typ je antwoord... (Ctrl+Enter om te verzenden)"
                                         rows={3}
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                     />
                                     <button
                                         onClick={handleSendReply}
@@ -462,7 +466,7 @@ export function EventMessaging() {
                                         className={clsx(
                                             'px-4 py-2 rounded-md font-medium text-sm h-fit',
                                             sending || !replyText.trim()
-                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                                                 : 'bg-indigo-600 text-white hover:bg-indigo-700'
                                         )}
                                     >
@@ -472,7 +476,7 @@ export function EventMessaging() {
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-500">
+                        <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
                             Selecteer een thread om berichten te zien
                         </div>
                     )}
