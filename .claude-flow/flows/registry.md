@@ -12,7 +12,7 @@
 | F003 | Event Creation | 🟢 | 3/3 | Done | ✅ |
 | F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
 | F005 | Ticket Selection | 🟢 | 2/2 | Done | ✅ |
-| F006 | Checkout/Payment | 🟢 | 1/1 | S1 Complete | ✅ |
+| F006 | Checkout/Payment | 🟢 | 4/4 | S4 Products Integration | ✅ |
 | F007 | Ticket Delivery | 🟡 | 2/3 | S2 Complete | ✅ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |

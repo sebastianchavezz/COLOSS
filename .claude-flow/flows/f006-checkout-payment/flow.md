@@ -2,8 +2,8 @@
 
 **ID**: F006
 **Status**: 🟢 Done
-**Total Sprints**: 3
-**Current Sprint**: S3 Complete
+**Total Sprints**: 4
+**Current Sprint**: S4 Complete
 
 ## Sprints
 | Sprint | Focus | Status |
@@ -11,35 +11,37 @@
 | S1 | Full checkout flow (order + validation + Mollie + webhook + ticket issuance) | 🟢 |
 | S2 | Mollie Sandbox Integration upgrade | 🟢 |
 | S3 | Waterdichte Mollie Integration (best practices) | 🟢 |
+| S4 | Products Integration (F015 - upgrades & merchandise) | 🟢 |
 
 ## Dependencies
-- **Requires**: F005 (Ticket Selection)
+- **Requires**: F005 (Ticket Selection), F015 (Products)
 - **Blocks**: F007, F009
 
 ## Overview
 
-Waterdichte checkout flow voor het aankopen van tickets.
+Waterdichte checkout flow voor het aankopen van tickets én producten.
 Werkt voor zowel ingelogde gebruikers als guests.
 
 ```
 Als bezoeker
 Wil ik veilig kunnen betalen via Mollie
-Zodat ik mijn tickets ontvang na succesvolle betaling
+Zodat ik mijn tickets en producten ontvang na succesvolle betaling
 ```
 
 ## Geïmplementeerde Componenten
 
-### Database (Migration: 20250128100000_f006_checkout_payment.sql)
+### Database (Migration: 20250128100000_f006_checkout_payment.sql + 20260203100000_f006_s4_products_integration.sql)
 - `orders.org_id` — server-afgeleid uit event (nooit client-trusted)
 - `orders.subtotal_amount` / `discount_amount` — transparante pricing
 - `validate_checkout_capacity` RPC — atomische capacity + sales window check (FOR UPDATE SKIP LOCKED)
+- `validate_checkout_with_products` RPC — **[S4]** validates tickets AND products atomically
 - `handle_payment_webhook` RPC — atomische webhook: ticket_instances + email + overbooked failsafe
 - `cleanup_stale_pending_orders` RPC — pending orders older than 1 hour
 
 ### Edge Functions
 | Function | Purpose | Status |
 |----------|---------|--------|
-| `create-order-public` | Guest + authenticated checkout | 🟢 Fully implemented |
+| `create-order-public` | Guest + authenticated checkout (tickets + products) | 🟢 Fully implemented |
 | `mollie-webhook` | Webhook handler with idempotency + ticket issuance | 🟢 Fully implemented |
 | `create-mollie-payment` | Authenticated-only payment creation | 🟢 Bestaand |
 | `get-order-public` | Public order lookup via token | 🟢 Bestaand |
@@ -50,8 +52,12 @@ Zodat ik mijn tickets ontvang na succesvolle betaling
 | Point | Where | What |
 |-------|-------|------|
 | Event visibility | create-order-public | events.status = 'published' |
-| Sales window | validate_checkout_capacity RPC | sales_start <= now() <= sales_end |
-| Capacity pre-check | validate_checkout_capacity RPC | FOR UPDATE SKIP LOCKED |
+| Sales window | validate_checkout_with_products RPC | sales_start <= now() <= sales_end |
+| Ticket capacity | validate_checkout_with_products RPC | FOR UPDATE SKIP LOCKED |
+| Product capacity | validate_checkout_with_products RPC | FOR UPDATE SKIP LOCKED |
+| Variant capacity | validate_checkout_with_products RPC | FOR UPDATE SKIP LOCKED |
+| max_per_order | validate_checkout_with_products RPC | Per-product limit |
+| Upgrade restrictions | validate_checkout_with_products RPC | Cart must contain allowed ticket |
 | Price integrity | create-order-public | Server-calculated, never client-trusted |
 | Webhook verification | mollie-webhook | Re-fetch from Mollie API |
 | Idempotency | mollie-webhook | payment_events unique constraint |
@@ -62,7 +68,17 @@ Zodat ik mijn tickets ontvang na succesvolle betaling
 ## Flow Diagram
 
 ```
-[Cart] → [Enter Details] → [create-order-public]
+[Cart: Tickets + Products] → [Enter Details] → [create-order-public]
+                                                      │
+                                                      ▼
+                                    [validate_checkout_with_products RPC]
+                                              │
+                                    ┌─────────┴─────────┐
+                                    ▼                   ▼
+                              [Validation OK]    [Validation Failed]
+                                    │                   │
+                                    ▼                   ▼
+                              [Create Order]     [Return Error]
                                     │
                           ┌─────────┴─────────┐
                           ▼                   ▼
@@ -91,10 +107,51 @@ Zodat ik mijn tickets ontvang na succesvolle betaling
                              [Order Confirmed]
 ```
 
+## S4: Products Integration (NEW)
+
+### Request Schema
+
+```typescript
+interface CreateOrderPublicRequest {
+  event_id?: string
+  event_slug?: string
+  items: TicketItem[]              // Ticket items
+  product_items?: ProductItem[]     // Product items (F015)
+  email: string
+  purchaser_name?: string
+}
+
+interface TicketItem {
+  ticket_type_id: string
+  quantity: number
+}
+
+interface ProductItem {
+  product_id: string
+  variant_id?: string  // Optional: specific variant
+  quantity: number
+}
+```
+
+### Product Validations
+| Rule | Description |
+|------|-------------|
+| Product active | `is_active = true AND deleted_at IS NULL` |
+| Same event | Product must belong to checkout event |
+| Sales window | `sales_start ≤ NOW() ≤ sales_end` |
+| Product capacity | Atomic lock + count sold |
+| Variant capacity | Atomic lock + count sold (if variant specified) |
+| max_per_order | Cannot exceed product.max_per_order |
+| ticket_upgrade | Cart must contain allowed ticket_type_id |
+
+### Backwards Compatibility
+- Empty `product_items` = ticket-only checkout (existing behavior)
+- Falls back to old RPC if new one not found (schema cache)
+
 ## Test Results
-- 25/25 tests passed
-- Coverage: schema, RPCs, edge functions, RLS, capacity validation
-- See: `tests/integration-tests.mjs`
+- S1-S3: 25/25 tests passed
+- S4: See `tests/s4-products-integration.mjs`
+- Coverage: schema, RPCs, edge functions, RLS, capacity validation, products
 
 ## Mollie Sandbox Testing (S2)
 
@@ -130,4 +187,4 @@ Sources:
 
 ---
 
-*Last updated: 2025-01-28*
+*Last updated: 2026-02-03*
