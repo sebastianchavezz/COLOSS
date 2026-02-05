@@ -3,6 +3,45 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { authHelpers } from '../lib/auth-helpers'
 import { Loader2 } from 'lucide-react'
+import { Session } from '@supabase/supabase-js'
+
+/**
+ * Extract first_name and last_name from Supabase session metadata.
+ * Handles multiple OAuth provider formats:
+ * - Email signup: user_metadata.first_name + user_metadata.last_name
+ * - Google OAuth: user_metadata.full_name or user_metadata.name (split on space)
+ */
+function getNameFromSession(session: Session): { firstName: string | null; lastName: string | null } {
+    const metadata = session?.user?.user_metadata || {}
+
+    // Try direct first_name/last_name fields (email signup)
+    if (metadata.first_name || metadata.last_name) {
+        return {
+            firstName: metadata.first_name || null,
+            lastName: metadata.last_name || null,
+        }
+    }
+
+    // Try full_name (Google OAuth)
+    if (metadata.full_name) {
+        const [firstName, ...lastNameParts] = metadata.full_name.split(' ')
+        return {
+            firstName: firstName || null,
+            lastName: lastNameParts.length > 0 ? lastNameParts.join(' ') : null,
+        }
+    }
+
+    // Try name field (alternative Google format)
+    if (metadata.name) {
+        const [firstName, ...lastNameParts] = metadata.name.split(' ')
+        return {
+            firstName: firstName || null,
+            lastName: lastNameParts.length > 0 ? lastNameParts.join(' ') : null,
+        }
+    }
+
+    return { firstName: null, lastName: null }
+}
 
 export default function AuthCallback() {
     const navigate = useNavigate()
@@ -28,9 +67,13 @@ export default function AuthCallback() {
             const next = authHelpers.consumeReturnTo()
 
             if (session) {
-                // Auto-link participant to user on successful auth
+                // Auto-link or create participant for the authenticated user
                 try {
-                    await supabase.rpc('link_current_user_to_participant')
+                    const { firstName, lastName } = getNameFromSession(session)
+                    await supabase.rpc('create_or_link_participant', {
+                        p_first_name: firstName,
+                        p_last_name: lastName,
+                    })
                 } catch (e) {
                     // Non-critical, ignore errors
                     console.log('Participant link attempt:', e)
@@ -41,9 +84,13 @@ export default function AuthCallback() {
                 // If no session yet, wait for the onAuthStateChange in AuthContext to fire
                 const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
                     if (event === 'SIGNED_IN' && session) {
-                        // Auto-link participant
+                        // Auto-link or create participant
                         try {
-                            await supabase.rpc('link_current_user_to_participant')
+                            const { firstName, lastName } = getNameFromSession(session)
+                            await supabase.rpc('create_or_link_participant', {
+                                p_first_name: firstName,
+                                p_last_name: lastName,
+                            })
                         } catch (e) {
                             console.log('Participant link attempt:', e)
                         }

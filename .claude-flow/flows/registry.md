@@ -7,7 +7,7 @@
 
 | ID | Flow | Status | Sprints | Current | Tests |
 |----|------|--------|---------|---------|-------|
-| F001 | User Registration | 🟢 | 1/1 | Done | ✅ |
+| F001 | User Registration | 🟢 | 2/2 | S2 Profile Management | ✅ |
 | F002 | User Login/Auth | 🟢 | 1/1 | Done | ✅ |
 | F003 | Event Creation | 🟢 | 3/3 | Done | ✅ |
 | F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
@@ -22,6 +22,7 @@
 | F013 | Invitation System | 🟢 | 1/1 | Done | ✅ |
 | F014 | Team Management (RBAC) | 🟢 | 1/1 | Done | ✅ |
 | F015 | Products (Upgrades & Merchandise) | 🟢 | 2/2 | Done | ✅ |
+| F016 | Participant Profile | 🟢 | 1/1 | Done | ✅ |
 
 ## Status Legend
 
@@ -36,10 +37,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Flows | 15 |
+| Total Flows | 16 |
 | 🔴 Planned | 0 |
 | 🟡 Active | 2 |
-| 🟢 Done | 13 |
+| 🟢 Done | 14 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
