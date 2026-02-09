@@ -36,6 +36,7 @@ import { PublicEvents } from './pages/public/PublicEvents'
 import { PublicEventDetail } from './pages/public/PublicEventDetail'
 import { ParticipantChat } from './pages/ParticipantChat'
 import { PublicFaq } from './pages/PublicFaq'
+import { EmbedCheckout } from './pages/embed/EmbedCheckout'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ResetPassword from './pages/ResetPassword'
@@ -48,10 +49,12 @@ import { MobileScanner } from './pages/MobileScanner'
 import CheckIn from './pages/events/CheckIn'
 import Transfers from './pages/events/Transfers'
 import { EventRouteAdmin } from './pages/events/EventRouteAdmin'
+import { EventEmbed } from './pages/events/EventEmbed'
 import { EventRouteTab } from './pages/events/EventRouteTab'
 import { EventRoute } from './pages/public/EventRoute'
 import { EventInvitations } from './pages/EventInvitations'
 import { PublicInvite } from './pages/public/PublicInvite'
+import { PublicEmailInvite } from './pages/public/PublicEmailInvite'
 import { TeamPage } from './pages/TeamPage'
 import { OrgDashboard } from './pages/OrgDashboard'
 import { Homepage } from './pages/Homepage'
@@ -94,6 +97,9 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          {/* Embeddable widget (iframe-safe, no header/nav) */}
+          <Route path="/embed/:eventSlug" element={<EmbedCheckout />} />
+
           <Route path="/e/:eventSlug" element={<PublicEventCheckout />} />
           <Route path="/e/:eventSlug/confirm" element={<PublicConfirm />} />
           <Route path="/e/:eventSlug/chat" element={<ParticipantChat />} />
@@ -102,6 +108,7 @@ function App() {
 
           {/* Public Invite */}
           <Route path="/invite/:code" element={<PublicInvite />} />
+          <Route path="/invite/email/:token" element={<PublicEmailInvite />} />
 
           {/* Public Event Discovery */}
           <Route path="/events" element={<PublicEvents />} />
@@ -150,6 +157,7 @@ function App() {
                 <Route path="communication" element={<EventCommunication />} />
                 <Route path="messaging" element={<EventMessaging />} />
                 <Route path="faq" element={<EventFaqAdmin />} />
+                <Route path="embed" element={<EventEmbed />} />
                 <Route path="invitations" element={<EventInvitations />} />
                 <Route path="scanner" element={<Scanner />} />
                 <Route path="settings" element={<EventSettings />} />

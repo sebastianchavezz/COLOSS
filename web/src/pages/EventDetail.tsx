@@ -14,7 +14,7 @@ import {
     ArrowLeft, Loader2, Trash2, CheckCircle, XCircle,
     LayoutDashboard, Ticket, ShoppingCart, Users, Route, Package,
     MessageSquare, Mail, HelpCircle, Settings, ChevronDown, CalendarDays, UserPlus,
-    CreditCard, Building2, QrCode
+    CreditCard, Building2, QrCode, Code
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useOrgSafe } from '../hooks/useOrg'
@@ -170,6 +170,7 @@ function EventSidebar({
         { name: 'Communicatie', href: 'communication', icon: MessageSquare },
         { name: 'Berichten', href: 'messaging', icon: Mail },
         { name: 'FAQ', href: 'faq', icon: HelpCircle },
+        { name: 'Embed', href: 'embed', icon: Code },
         { name: 'Instellingen', href: 'settings', icon: Settings },
     ]
 
