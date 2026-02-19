@@ -9,11 +9,11 @@
 |----|------|--------|---------|---------|-------|
 | F001 | User Registration | 🟢 | 2/2 | S2 Profile Management | ✅ |
 | F002 | User Login/Auth | 🟢 | 1/1 | Done | ✅ |
-| F003 | Event Creation | 🟢 | 3/3 | Done | ✅ |
+| F003 | Event Creation | 🟢 | 4/4 | S4 Modern Map Styles | ✅ |
 | F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
 | F005 | Ticket Selection | 🟢 | 2/2 | Done | ✅ |
 | F006 | Checkout/Payment | 🟢 | 4/4 | S4 Products Integration | ✅ |
-| F007 | Ticket Delivery | 🟡 | 2/3 | S2 Complete | ✅ |
+| F007 | Ticket Delivery | 🟢 | 3/3 | S3 Email+PDF Complete | ✅ |
 | F008 | Communication | 🟢 | 1/1 | Done | ✅ |
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
 | F010 | Organizer Dashboard | 🟡 | 2/3 | S2 Complete | ✅ |
@@ -23,6 +23,7 @@
 | F014 | Team Management (RBAC) | 🟢 | 1/1 | Done | ✅ |
 | F015 | Products (Upgrades & Merchandise) | 🟢 | 2/2 | Done | ✅ |
 | F016 | Participant Profile | 🟢 | 1/1 | Done | ✅ |
+| F017 | Embeddable Widget | 🟢 | 1/1 | Done | ✅ |
 
 ## Status Legend
 
@@ -37,10 +38,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Flows | 16 |
+| Total Flows | 17 |
 | 🔴 Planned | 0 |
-| 🟡 Active | 2 |
-| 🟢 Done | 14 |
+| 🟡 Active | 1 |
+| 🟢 Done | 16 |
 | ⚫ Blocked | 0 |
 
 ## Dependency Graph
@@ -58,7 +59,7 @@ F001 (User Registration)
   │      │      │             │
   │      │      │             └──► F006 (Checkout/Payment) ✅
   │      │      │                    │
-  │      │      │                    ├──► F007 (Ticket Delivery) 🟡
+  │      │      │                    ├──► F007 (Ticket Delivery) ✅
   │      │      │                    │
   │      │      │                    ├──► F009 (Refund) ✅
   │      │      │                    │
@@ -170,4 +171,4 @@ F001 (User Registration)
 
 ---
 
-*Last updated: 2026-02-02*
+*Last updated: 2026-02-09*

@@ -1,16 +1,16 @@
 # Flow: Ticket Delivery
 
 **ID**: F007
-**Status**: 🟡 In Progress
+**Status**: 🟢 Done
 **Total Sprints**: 3
-**Current Sprint**: S2 (Complete)
+**Current Sprint**: S3 (Complete)
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | S1 | Professional ticket scanning | ✅ Complete |
 | S2 | Mobile Ticket Scanner (BYOD) | ✅ Complete |
-| S3 | Email delivery + PDF | 🔴 Planned |
+| S3 | Email delivery + PDF + In-App | ✅ Complete |
 
 ## Dependencies
 - **Requires**: F006
@@ -117,9 +117,12 @@ Zodat ik toegang heb tot het evenement
 - [x] Real-time stats display
 
 **Sprint S3 (Delivery)**:
-- [ ] Email with tickets sent
-- [ ] PDF downloadable
-- [ ] Tickets viewable in app
+- [x] Email with tickets sent (queue_ticket_delivery_email RPC)
+- [x] PDF downloadable (ticket-pdf Edge Function)
+- [x] Tickets viewable in app (MijnTickets with download)
+- [x] HTML escape for XSS prevention
+- [x] Status guard (only issued tickets downloadable)
+- [x] Idempotent email delivery (ticket-delivery:{order_id})
 
 ---
 
