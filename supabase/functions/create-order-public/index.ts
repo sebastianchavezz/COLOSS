@@ -52,6 +52,8 @@ interface CreateOrderPublicRequest {
     email: string
     purchaser_name?: string
     // Optional: Bearer token in Authorization header for authenticated users
+    // B008: Optional invitation token - gives ACCESS to purchase (NOT a discount!)
+    invitation_token?: string
 }
 
 /**
@@ -101,7 +103,7 @@ serve(async (req: Request) => {
             return errorResponse('Invalid JSON', 'INVALID_JSON', 400)
         }
 
-        const { event_id, event_slug, items, product_items, email, purchaser_name } = body
+        const { event_id, event_slug, items, product_items, email, purchaser_name, invitation_token } = body
 
         if (!event_id && !event_slug) {
             return errorResponse('Missing event_id or event_slug', 'MISSING_EVENT_ID', 400)
@@ -217,6 +219,55 @@ serve(async (req: Request) => {
         logger.info('Event verified', { name: event.name, org_id: event.org_id })
 
         // =================================================================
+        // 3.5 B008: VALIDATE INVITATION TOKEN (if provided)
+        // =================================================================
+        let invitationValidation: any = null
+        let invitedTicketTypeId: string | null = null
+
+        if (invitation_token) {
+            logger.info('Invitation token provided, validating...')
+
+            // Validate the invitation token
+            const { data: invValidation, error: invError } = await supabaseAdmin
+                .rpc('validate_email_invitation', { _token: invitation_token })
+
+            if (invError) {
+                logger.error('Invitation validation failed', invError)
+                // Don't block - just proceed without discount
+            } else if (!invValidation?.valid) {
+                logger.warn('Invalid invitation token', { error: invValidation?.error })
+                // Return error for critical invitation issues
+                if (invValidation?.error === 'ALREADY_CLAIMED') {
+                    return errorResponse('Deze uitnodiging is al geclaimd', 'INVITATION_ALREADY_CLAIMED', 400)
+                }
+                // For other errors, proceed without discount
+            } else {
+                // Check if user email matches invitation email
+                if (invValidation.recipient_email && email.toLowerCase() !== invValidation.recipient_email.toLowerCase()) {
+                    logger.warn('Email mismatch for invitation', {
+                        expected: invValidation.recipient_email,
+                        provided: email
+                    })
+                    return errorResponse(
+                        `Deze uitnodiging is voor ${invValidation.recipient_email}, niet ${email}`,
+                        'INVITATION_EMAIL_MISMATCH',
+                        403
+                    )
+                }
+
+                // Store validated invitation info
+                invitationValidation = invValidation
+                invitedTicketTypeId = invValidation.ticket?.id
+
+                logger.info('Invitation validated', {
+                    invitationId: invValidation.invitation_id,
+                    ticketTypeId: invitedTicketTypeId,
+                    originalPrice: invValidation.ticket?.price
+                })
+            }
+        }
+
+        // =================================================================
         // 4. ATOMIC CAPACITY + PRICE VALIDATION (via RPC)
         // =================================================================
         const ticketItemsJsonb = hasTickets
@@ -281,7 +332,8 @@ serve(async (req: Request) => {
                 const serverPrice: number = parseFloat(ticketResult.total_price.toString())
                 const ticketDetails = ticketResult.details
 
-                // Continue with order creation using ticket-only data
+                // Invitation gives ACCESS, NOT a discount - user pays full price!
+                // Continue with order creation using ticket-only data at FULL PRICE
                 return await createOrder({
                     supabaseAdmin,
                     logger,
@@ -290,10 +342,14 @@ serve(async (req: Request) => {
                     userId,
                     email,
                     purchaser_name,
-                    serverPrice,
+                    serverPrice,  // FULL PRICE - no discount!
+                    originalPrice: serverPrice,
+                    discountAmount: 0,  // NO DISCOUNT
                     ticketDetails,
                     productDetails: [],
-                    req
+                    req,
+                    invitationToken: invitation_token,
+                    invitedTicketTypeId
                 })
             }
 
@@ -314,16 +370,21 @@ serve(async (req: Request) => {
         }
 
         const serverPrice: number = parseFloat(capacityResult.total_price.toString())
+        const totalVat: number = capacityResult.total_vat != null
+            ? parseFloat(capacityResult.total_vat.toString())
+            : 0  // Fallback for old RPC without VAT
         const ticketDetails = capacityResult.ticket_details || []
         const productDetails = capacityResult.product_details || []
 
         logger.info('Capacity & pricing validated', {
             total_price: serverPrice,
+            total_vat: totalVat,
             tickets: ticketDetails.filter((d: any) => d.status === 'OK').length,
             products: productDetails.filter((d: any) => d.status === 'OK').length
         })
 
-        // Continue with order creation
+        // Invitation gives ACCESS to buy, NOT a discount - user pays full price!
+        // Continue with order creation at FULL PRICE
         return await createOrder({
             supabaseAdmin,
             logger,
@@ -332,10 +393,15 @@ serve(async (req: Request) => {
             userId,
             email,
             purchaser_name,
-            serverPrice,
+            serverPrice,  // FULL PRICE - no discount!
+            originalPrice: serverPrice,
+            discountAmount: 0,  // NO DISCOUNT
+            totalVat,
             ticketDetails,
             productDetails,
-            req
+            req,
+            invitationToken: invitation_token,
+            invitedTicketTypeId
         })
 
     } catch (error: unknown) {
@@ -357,9 +423,14 @@ async function createOrder(params: {
     email: string
     purchaser_name?: string
     serverPrice: number
+    originalPrice?: number      // B011: Same as serverPrice (no discount)
+    discountAmount?: number     // B011: Always 0 (invitation = ACCESS, not discount)
+    totalVat?: number           // S5a: Total VAT amount (back-calculated from inclusive prices)
     ticketDetails: any[]
     productDetails: any[]
     req: Request
+    invitationToken?: string    // B008: Token for marking invitation claimed
+    invitedTicketTypeId?: string | null  // B008: Which ticket type was invited
 }) {
     const {
         supabaseAdmin,
@@ -370,9 +441,14 @@ async function createOrder(params: {
         email,
         purchaser_name,
         serverPrice,
+        originalPrice = serverPrice,
+        discountAmount = 0,
+        totalVat = 0,
         ticketDetails,
         productDetails,
-        req
+        req,
+        invitationToken,
+        invitedTicketTypeId
     } = params
 
     // =================================================================
@@ -385,6 +461,15 @@ async function createOrder(params: {
     // =================================================================
     // 6. CREATE ORDER
     // =================================================================
+    // B011: Invitation gives ACCESS, not discount - metadata tracks invitation source only
+    const orderMetadata: Record<string, any> = {}
+    if (invitationToken) {
+        orderMetadata.invitation_token = invitationToken
+        orderMetadata.invited_ticket_type_id = invitedTicketTypeId
+        orderMetadata.source = 'email_invitation'
+        // Note: NO discount applied - user pays full price
+    }
+
     const { data: order, error: orderError } = await supabaseAdmin
         .from('orders')
         .insert({
@@ -394,11 +479,14 @@ async function createOrder(params: {
             email: email,
             purchaser_name: purchaser_name || null,
             status: 'pending',
-            subtotal_amount: serverPrice,
-            total_amount: serverPrice,
+            subtotal_amount: originalPrice,      // B011: Full price (no discount)
+            discount_amount: discountAmount,     // B011: Always 0 (no discount)
+            total_amount: serverPrice,           // B011: Full price (user pays 100%)
+            vat_amount: totalVat,               // S5a: Total VAT (back-calculated from inclusive prices)
             currency: 'EUR',
             public_token_hash: publicTokenHash,
             public_token_created_at: new Date().toISOString(),
+            metadata: Object.keys(orderMetadata).length > 0 ? orderMetadata : null,
         })
         .select('id, status, total_amount, created_at')
         .single()
@@ -413,11 +501,18 @@ async function createOrder(params: {
     // =================================================================
     // 7. CREATE ORDER ITEMS (tickets + products)
     // =================================================================
+    // Invitation gives ACCESS to buy, NOT a discount - full price for all items!
     const orderItemsPayload: any[] = []
 
-    // Add ticket items
+    // Add ticket items at FULL PRICE with VAT breakdown
     for (const detail of ticketDetails) {
         if (detail.status === 'OK') {
+            const vatPct = detail.vat_percentage != null ? parseFloat(detail.vat_percentage.toString()) : 21.00
+            const lineTotal = parseFloat(detail.line_total.toString())
+            const vatAmount = detail.vat_amount != null
+                ? parseFloat(detail.vat_amount.toString())
+                : Math.round(lineTotal * vatPct / (100 + vatPct) * 100) / 100  // Fallback calculation
+
             orderItemsPayload.push({
                 order_id: order.id,
                 ticket_type_id: detail.ticket_type_id,
@@ -425,14 +520,22 @@ async function createOrder(params: {
                 product_variant_id: null,
                 quantity: detail.quantity,
                 unit_price: parseFloat(detail.price.toString()),
-                total_price: parseFloat(detail.line_total.toString()),
+                total_price: lineTotal,
+                vat_percentage: vatPct,
+                vat_amount: vatAmount,
             })
         }
     }
 
-    // Add product items
+    // Add product items with VAT breakdown
     for (const detail of productDetails) {
         if (detail.status === 'OK') {
+            const vatPct = detail.vat_percentage != null ? parseFloat(detail.vat_percentage.toString()) : 21.00
+            const lineTotal = parseFloat(detail.line_total.toString())
+            const vatAmount = detail.vat_amount != null
+                ? parseFloat(detail.vat_amount.toString())
+                : Math.round(lineTotal * vatPct / (100 + vatPct) * 100) / 100  // Fallback calculation
+
             orderItemsPayload.push({
                 order_id: order.id,
                 ticket_type_id: null,
@@ -440,7 +543,9 @@ async function createOrder(params: {
                 product_variant_id: detail.variant_id || null,
                 quantity: detail.quantity,
                 unit_price: parseFloat(detail.price.toString()),
-                total_price: parseFloat(detail.line_total.toString()),
+                total_price: lineTotal,
+                vat_percentage: vatPct,
+                vat_amount: vatAmount,
             })
         }
     }
@@ -541,9 +646,38 @@ async function createOrder(params: {
             }
         }
 
+        // B008: Mark invitation as claimed if this was an invitation order
+        if (invitationToken && issuedTickets.length > 0) {
+            try {
+                // Find the ticket ID for the invited ticket type
+                const invitedTicket = issuedTickets.find((t: any) =>
+                    t.ticket_type_id === invitedTicketTypeId
+                )
+                const ticketInstanceId = invitedTicket?.id || issuedTickets[0]?.id
+
+                const { error: claimError } = await supabaseAdmin
+                    .rpc('mark_invitation_claimed_by_order', {
+                        _token: invitationToken,
+                        _order_id: order.id,
+                        _ticket_instance_id: ticketInstanceId
+                    })
+
+                if (claimError) {
+                    logger.error('Failed to mark invitation as claimed', claimError)
+                } else {
+                    logger.info('Invitation marked as claimed', {
+                        token: invitationToken.slice(0, 8) + '...',
+                        orderId: order.id
+                    })
+                }
+            } catch (claimErr) {
+                logger.error('Mark invitation claimed failed', claimErr)
+            }
+        }
+
         return jsonResponse({
             success: true,
-            message: 'Order completed (free)',
+            message: invitationToken ? 'Order completed (invitation claimed)' : 'Order completed (free)',
             order: {
                 id: order.id,
                 status: 'paid',
@@ -640,7 +774,29 @@ async function createOrder(params: {
             return errorResponse('Payment provider unreachable', 'MOLLIE_UNREACHABLE', 502)
         }
 
-        logger.info('Mollie payment created', { mollieId: mollieData.id })
+        logger.info('Mollie payment created', {
+            mollieId: mollieData.id,
+            status: mollieData.status,
+            checkoutUrl: mollieData._links?.checkout?.href,
+            hasLinks: !!mollieData._links,
+            linkKeys: mollieData._links ? Object.keys(mollieData._links) : []
+        })
+
+        // Validate that Mollie returned a checkout URL
+        const checkoutUrl = mollieData._links?.checkout?.href
+        if (!checkoutUrl) {
+            logger.error('Mollie did not return a checkout URL', {
+                mollieId: mollieData.id,
+                links: mollieData._links,
+                fullResponse: JSON.stringify(mollieData).slice(0, 500)
+            })
+            return errorResponse(
+                'Payment provider did not return checkout URL',
+                'MOLLIE_NO_CHECKOUT_URL',
+                502,
+                { mollieId: mollieData.id, status: mollieData.status }
+            )
+        }
 
         // Store payment record
         const { error: paymentInsertError } = await supabaseAdmin
@@ -692,7 +848,7 @@ async function createOrder(params: {
                 payment_id: mollieData.id,
                 test_mode: isTestMode,
             },
-            checkout_url: mollieData._links?.checkout?.href,
+            checkout_url: checkoutUrl,
             public_token: publicToken
         }, 200)
     }
