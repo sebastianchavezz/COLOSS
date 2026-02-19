@@ -21,6 +21,7 @@ export interface OrgDashboardStats {
   summary: {
     events: EventsSummary;
     tickets: TicketsSummary;
+    subscriptions?: SubscriptionsSummary;
   };
   events: EventSummary[];
   recent_activity: ActivityItem[];
@@ -70,6 +71,84 @@ export interface ActivityItem {
   created_at: string;
   event_name: string | null;
   metadata: Record<string, unknown> | null;
+}
+
+export interface SubscriptionsSummary {
+  active: number;
+  past_due: number;
+  mrr: number;
+}
+
+// ============================================
+// Subscription Dashboard (F010 S3)
+// ============================================
+
+export interface OrgSubscriptionStats {
+  summary: {
+    total: number;
+    active: number;
+    pending_mandate: number;
+    past_due: number;
+    cancelled: number;
+    completed: number;
+    suspended: number;
+    mrr: number;
+    total_revenue: number;
+  };
+  per_event: SubscriptionEventBreakdown[];
+  subscribers: SubscriberRow[];
+  recent_payments: SubscriptionPaymentRow[];
+  generated_at: string;
+  error?: string;
+  message?: string;
+}
+
+export interface SubscriptionEventBreakdown {
+  event_id: string;
+  event_name: string;
+  event_slug: string;
+  event_mode: string;
+  active: number;
+  past_due: number;
+  cancelled: number;
+  total: number;
+}
+
+export interface SubscriberRow {
+  subscription_id: string;
+  user_id: string;
+  email: string;
+  event_id: string;
+  event_name: string;
+  ticket_type_name: string;
+  status: string;
+  billing_interval: string;
+  amount: number;
+  currency: string;
+  cycles_completed: number;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  next_payment_date: string | null;
+  started_at: string | null;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+  created_at: string;
+}
+
+export interface SubscriptionPaymentRow {
+  payment_id: string;
+  subscription_id: string;
+  email: string;
+  event_name: string;
+  mollie_payment_id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  cycle_number: number | null;
+  period_start: string | null;
+  period_end: string | null;
+  failure_reason: string | null;
+  created_at: string;
 }
 
 // ============================================

@@ -3,6 +3,7 @@
  *
  * Landing page for organizers showing org-level statistics.
  * Uses get_org_dashboard_stats RPC from F010 S1.
+ * S3: Added subscription management section.
  */
 
 import { useEffect, useState } from 'react'
@@ -15,41 +16,65 @@ import {
   Clock,
   ArrowRight,
   Loader2,
-  Activity
+  Activity,
+  RefreshCw,
+  Users,
+  AlertTriangle,
+  Euro
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useOrgSafe } from '../hooks/useOrg'
 import { supabase } from '../lib/supabase'
-import type { OrgDashboardStats, EventSummary, ActivityItem } from '../types/dashboard'
+import type {
+  OrgDashboardStats,
+  EventSummary,
+  ActivityItem,
+  OrgSubscriptionStats,
+  SubscriberRow
+} from '../types/dashboard'
 
 export function OrgDashboard() {
   const context = useOrgSafe()
   const org = context?.org
 
   const [stats, setStats] = useState<OrgDashboardStats | null>(null)
+  const [subStats, setSubStats] = useState<OrgSubscriptionStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
     async function fetchStats() {
-      if (!org) return
+      if (!org) { setLoading(false); return }
 
-      const { data, error: fetchError } = await supabase.rpc('get_org_dashboard_stats', {
-        _org_id: org.id
-      })
+      const [dashResult, subResult] = await Promise.all([
+        supabase.rpc('get_org_dashboard_stats', { _org_id: org.id }),
+        supabase.rpc('get_org_subscription_stats', { _org_id: org.id })
+      ])
 
-      if (fetchError) {
-        setError(fetchError.message)
-      } else if (data?.error) {
-        setError(data.message || data.error)
+      if (cancelled) return
+
+      if (dashResult.error) {
+        setError(dashResult.error.message)
+      } else if (dashResult.data?.error) {
+        setError(dashResult.data.message || dashResult.data.error)
       } else {
-        setStats(data as OrgDashboardStats)
+        setStats(dashResult.data as OrgDashboardStats)
+      }
+
+      // Subscription stats are optional (may not exist yet)
+      if (!subResult.error && subResult.data && 'summary' in subResult.data && !subResult.data?.error) {
+        setSubStats(subResult.data as OrgSubscriptionStats)
       }
 
       setLoading(false)
     }
 
     fetchStats()
+    return () => { cancelled = true }
   }, [org?.id])
 
   if (!org) {
@@ -75,6 +100,8 @@ export function OrgDashboard() {
       </div>
     )
   }
+
+  const hasSubscriptions = subStats && subStats.summary.total > 0
 
   return (
     <div className="space-y-8">
@@ -109,14 +136,29 @@ export function OrgDashboard() {
             : '0%'}
           color="blue"
         />
-        <StatCard
-          icon={<TrendingUp className="h-6 w-6 text-purple-600" />}
-          label="Beschikbaar"
-          value={stats.summary.tickets.available}
-          subtext="tickets te koop"
-          color="purple"
-        />
+        {hasSubscriptions ? (
+          <StatCard
+            icon={<RefreshCw className="h-6 w-6 text-purple-600" />}
+            label="Actieve abonnementen"
+            value={subStats.summary.active}
+            subtext={`MRR: \u20AC${Number(subStats.summary.mrr).toFixed(2)}`}
+            color="purple"
+          />
+        ) : (
+          <StatCard
+            icon={<TrendingUp className="h-6 w-6 text-purple-600" />}
+            label="Beschikbaar"
+            value={stats.summary.tickets.available}
+            subtext="tickets te koop"
+            color="purple"
+          />
+        )}
       </div>
+
+      {/* Subscription Section (only shown when org has subscriptions) */}
+      {hasSubscriptions && (
+        <SubscriptionSection stats={subStats} />
+      )}
 
       {/* Events Grid */}
       <div>
@@ -169,7 +211,166 @@ export function OrgDashboard() {
 }
 
 // ============================================
-// Sub-components
+// Subscription Section (F010 S3)
+// ============================================
+
+function SubscriptionSection({ stats }: { stats: OrgSubscriptionStats }) {
+  const [showAll, setShowAll] = useState(false)
+  const displayedSubscribers = showAll ? stats.subscribers : stats.subscribers.slice(0, 10)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-medium text-gray-900">Abonnementen</h2>
+      </div>
+
+      {/* Subscription KPI Cards */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <MiniStatCard
+          icon={<Users className="h-5 w-5 text-green-600" />}
+          label="Actief"
+          value={stats.summary.active}
+        />
+        <MiniStatCard
+          icon={<AlertTriangle className="h-5 w-5 text-yellow-600" />}
+          label="Achterstallig"
+          value={stats.summary.past_due}
+        />
+        <MiniStatCard
+          icon={<Euro className="h-5 w-5 text-indigo-600" />}
+          label="MRR"
+          value={`\u20AC${Number(stats.summary.mrr).toFixed(2)}`}
+        />
+        <MiniStatCard
+          icon={<Euro className="h-5 w-5 text-green-600" />}
+          label="Totale omzet"
+          value={`\u20AC${Number(stats.summary.total_revenue).toFixed(2)}`}
+        />
+      </div>
+
+      {/* Subscribers Table */}
+      {stats.subscribers.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900">
+              Leden ({stats.subscribers.length})
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">E-mail</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Evenement</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ticket</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Bedrag</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cycli</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Volgende betaling</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {displayedSubscribers.map((sub) => (
+                  <SubscriberTableRow key={sub.subscription_id} subscriber={sub} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {stats.subscribers.length > 10 && (
+            <div className="px-4 py-3 border-t border-gray-200 text-center">
+              <button
+                onClick={() => setShowAll(!showAll)}
+                className="text-sm text-indigo-600 hover:text-indigo-500"
+              >
+                {showAll ? 'Minder tonen' : `Alle ${stats.subscribers.length} leden tonen`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SubscriberTableRow({ subscriber }: { subscriber: SubscriberRow }) {
+  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+    active: { bg: 'bg-green-100', text: 'text-green-800', label: 'Actief' },
+    pending_mandate: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'In afwachting' },
+    past_due: { bg: 'bg-red-100', text: 'text-red-800', label: 'Achterstallig' },
+    cancelled: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Opgezegd' },
+    completed: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Voltooid' },
+    suspended: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Opgeschort' }
+  }
+
+  const intervalLabels: Record<string, string> = {
+    '1 month': '/mnd',
+    '3 months': '/kwt',
+    '1 year': '/jr'
+  }
+
+  const { bg, text, label } = statusConfig[subscriber.status] || statusConfig.active
+
+  return (
+    <tr className="hover:bg-gray-50">
+      <td className="px-4 py-2 text-sm text-gray-900 truncate max-w-[200px]">
+        {subscriber.email}
+      </td>
+      <td className="px-4 py-2 text-sm text-gray-500 truncate max-w-[150px]">
+        {subscriber.event_name}
+      </td>
+      <td className="px-4 py-2 text-sm text-gray-500 truncate max-w-[120px]">
+        {subscriber.ticket_type_name}
+      </td>
+      <td className="px-4 py-2">
+        <span className={clsx('inline-flex px-2 py-0.5 rounded text-xs font-medium', bg, text)}>
+          {label}
+        </span>
+      </td>
+      <td className="px-4 py-2 text-sm text-gray-900">
+        {'\u20AC'}{Number(subscriber.amount).toFixed(2)}{intervalLabels[subscriber.billing_interval] || ''}
+      </td>
+      <td className="px-4 py-2 text-sm text-gray-500">
+        {subscriber.cycles_completed}
+      </td>
+      <td className="px-4 py-2 text-sm text-gray-500">
+        {subscriber.next_payment_date
+          ? new Date(subscriber.next_payment_date).toLocaleDateString('nl-NL', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            })
+          : '-'}
+      </td>
+    </tr>
+  )
+}
+
+function MiniStatCard({
+  icon,
+  label,
+  value
+}: {
+  icon: React.ReactNode
+  label: string
+  value: number | string
+}) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div className="flex items-center space-x-3">
+        <div className="flex-shrink-0">{icon}</div>
+        <div>
+          <p className="text-xs text-gray-500">{label}</p>
+          <p className="text-lg font-semibold text-gray-900">
+            {typeof value === 'number' ? value.toLocaleString() : value}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// Sub-components (existing)
 // ============================================
 
 function StatCard({
@@ -295,7 +496,10 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     'EVENT_CREATED': 'Evenement aangemaakt',
     'EVENT_PUBLISHED': 'Evenement gepubliceerd',
     'REFUND_CREATED': 'Terugbetaling',
-    'TICKET_TRANSFERRED': 'Ticket overdracht'
+    'TICKET_TRANSFERRED': 'Ticket overdracht',
+    'SUBSCRIPTION_PAYMENT_PROCESSED': 'Abonnement verlengd',
+    'SUBSCRIPTION_CANCELLED': 'Abonnement opgezegd',
+    'SUBSCRIPTION_PAYMENT_FAILED': 'Abonnementsbetaling mislukt'
   }
 
   return (
