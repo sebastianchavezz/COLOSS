@@ -14,14 +14,14 @@
 | F005 | Ticket Selection | 🟢 | 2/2 | Done | ✅ |
 | F006 | Checkout/Payment | 🟢 | 4/4 | S4 Products Integration | ✅ |
 | F007 | Ticket Delivery | 🟢 | 3/3 | S3 Email+PDF Complete | ✅ |
-| F008 | Communication | 🟢 | 1/1 | Done | ✅ |
+| F008 | Communication | 🟢 | 2/2 | S2 Transactional Email Integration | ✅ |
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
 | F010 | Organizer Dashboard | 🟡 | 2/3 | S2 Complete | ✅ |
 | F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
 | F012 | Event Communication (Messaging + FAQ) | 🟢 | 3/3 | S3 Open Chat | ✅ |
 | F013 | Invitation System | 🟢 | 1/1 | Done | ✅ |
 | F014 | Team Management (RBAC) | 🟢 | 1/1 | Done | ✅ |
-| F015 | Products (Upgrades & Merchandise) | 🟢 | 2/2 | Done | ✅ |
+| F015 | Products (Upgrades & Merchandise) | 🟢 | 3/3 | S3 Product Upsell Flow | ✅ |
 | F016 | Participant Profile | 🟢 | 1/1 | Done | ✅ |
 | F017 | Embeddable Widget | 🟢 | 1/1 | Done | ✅ |
 
@@ -171,4 +171,4 @@ F001 (User Registration)
 
 ---
 
-*Last updated: 2026-02-09*
+*Last updated: 2026-02-19*

@@ -2,14 +2,15 @@
 
 **ID**: F015
 **Status**: 🟢 Complete
-**Total Sprints**: 2
-**Current Sprint**: S2 (Complete)
+**Total Sprints**: 3
+**Current Sprint**: S3 (Complete)
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | S1 | Data Layer + RPCs | 🟢 Complete |
 | S2 | Frontend UI | 🟢 Complete |
+| S3 | Product Upsell Flow (E2E) | 🟢 Complete |
 
 ## Dependencies
 - **Requires**: F003 ✅ (Events), F006 ✅ (Checkout)
@@ -111,5 +112,14 @@ Zodat ik meer waarde kan bieden en extra omzet kan genereren
 - [x] Category sections (Ticket upgrades / Losstaande producten)
 - [x] Data layer (web/src/data/products.ts)
 
+### S3 (Product Upsell Flow E2E) ✅ COMPLETE
+- [x] Bug fix: getPublicProducts() data return
+- [x] scan_ticket RPC extended with order_products
+- [x] queue_ticket_delivery_email extended with product section
+- [x] getProductStatusBadge() helper
+- [x] PublicEventCheckout: products section + standalone products
+- [x] PublicEventDetail: product preview in sidebar
+- [x] ScanPage: order products in scan result
+
 ---
-*Last updated: 2026-02-02*
+*Last updated: 2026-02-19*

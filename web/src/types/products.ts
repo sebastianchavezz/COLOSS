@@ -263,6 +263,31 @@ export function isProductAvailable(product: PublicProduct): boolean {
   return true;
 }
 
+/**
+ * Get status badge for a product (mirrors ticket badge pattern)
+ */
+export function getProductStatusBadge(product: PublicProduct): { text: string; className: string } | null {
+  if (product.available_capacity !== null && product.available_capacity <= 0) {
+    return { text: 'Uitverkocht', className: 'bg-red-100 text-red-800' };
+  }
+
+  const now = new Date();
+
+  if (product.sales_start && new Date(product.sales_start) > now) {
+    return { text: 'Binnenkort', className: 'bg-yellow-100 text-yellow-800' };
+  }
+
+  if (product.sales_end && new Date(product.sales_end) < now) {
+    return { text: 'Verkoop gesloten', className: 'bg-gray-100 text-gray-800' };
+  }
+
+  if (product.available_capacity !== null && product.available_capacity <= 5 && product.available_capacity > 0) {
+    return { text: `Nog ${product.available_capacity}`, className: 'bg-orange-100 text-orange-800' };
+  }
+
+  return null;
+}
+
 export function getProductDisplayPrice(product: PublicProduct): string {
   return new Intl.NumberFormat('nl-NL', {
     style: 'currency',

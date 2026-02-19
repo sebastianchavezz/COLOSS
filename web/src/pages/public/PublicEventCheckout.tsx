@@ -10,17 +10,22 @@
  * - Toon event details
  * - Lijst published tickets met real-time availability
  * - Sold out states + max per participant limits
+ * - Products section (F015 S3) - extra's & producten
+ * - Standalone producten mogen los gekocht worden
  * - Pre-checkout validation via RPC
  * - Call create-order-public Edge Function
  * - Redirect naar Mollie of confirmation page
  */
 
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
-import { Calendar, MapPin, Ticket, Loader2, ShoppingCart, AlertCircle, ArrowLeft } from 'lucide-react'
+import { useParams, useNavigate, useLocation, Link, useSearchParams } from 'react-router-dom'
+import { Calendar, MapPin, Ticket, Loader2, ShoppingCart, AlertCircle, ArrowLeft, Gift, CheckCircle, Package } from 'lucide-react'
 import { getPublicEventBySlug } from '../../data/public_events'
+import { getPublicProducts, formatPrice } from '../../data/products'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { validateEmailInvitation, type EmailInvitationValidation } from '../../data/invitations'
+import { isProductAvailable, getProductStatusBadge, type PublicProduct } from '../../types/products'
 
 // Ticket type with availability info from RPC
 interface TicketWithAvailability {
@@ -58,11 +63,21 @@ interface ValidationError {
     sales_end?: string
 }
 
+// Product quantity state: productId -> { quantity, variantId? }
+interface ProductSelection {
+    quantity: number
+    variantId?: string
+}
+
 export function PublicEventCheckout() {
     const { eventSlug } = useParams<{ eventSlug: string }>()
     const navigate = useNavigate()
     const location = useLocation()
+    const [searchParams] = useSearchParams()
     const { user, loading: authLoading } = useAuth()
+
+    // B008: Check for invitation token in URL
+    const invitationToken = searchParams.get('invitation')
 
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -72,6 +87,14 @@ export function PublicEventCheckout() {
     const [quantities, setQuantities] = useState<Record<string, number>>({})
     const [submitting, setSubmitting] = useState(false)
     const [validating, setValidating] = useState(false)
+
+    // F015 S3: Products state
+    const [products, setProducts] = useState<PublicProduct[]>([])
+    const [productQuantities, setProductQuantities] = useState<Record<string, ProductSelection>>({})
+
+    // B011: Invitation state (gives ACCESS, not discount)
+    const [invitation, setInvitation] = useState<EmailInvitationValidation | null>(null)
+    const [invitationLoading, setInvitationLoading] = useState(false)
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -126,6 +149,69 @@ export function PublicEventCheckout() {
         fetchEvent()
     }, [eventSlug])
 
+    // F015 S3: Fetch products (reactief op ticket selectie)
+    useEffect(() => {
+        async function fetchProducts() {
+            if (!event?.id) return
+
+            // Get selected ticket type IDs for ticket_upgrade filtering
+            const selectedTicketTypeIds = Object.entries(quantities)
+                .filter(([_, qty]) => qty > 0)
+                .map(([ticketId]) => ticketId)
+
+            const { data: productData, error: productError } = await getPublicProducts(
+                event.id,
+                selectedTicketTypeIds.length > 0 ? selectedTicketTypeIds : undefined
+            )
+
+            if (productError) {
+                console.error('[Checkout] Products error:', productError)
+            } else {
+                setProducts(productData || [])
+                // Clean up product quantities for products no longer available
+                if (productData) {
+                    const availableIds = new Set(productData.map(p => p.id))
+                    setProductQuantities(prev => {
+                        const cleaned: Record<string, ProductSelection> = {}
+                        for (const [id, sel] of Object.entries(prev)) {
+                            if (availableIds.has(id)) cleaned[id] = sel
+                        }
+                        return cleaned
+                    })
+                }
+            }
+        }
+
+        fetchProducts()
+    }, [event?.id, quantities])
+
+    // B011: Load invitation data if token present (for pre-selecting ticket)
+    useEffect(() => {
+        async function loadInvitation() {
+            if (!invitationToken) return
+
+            setInvitationLoading(true)
+            const { data, error: invError } = await validateEmailInvitation(invitationToken)
+
+            if (invError || !data?.valid) {
+                console.error('[Checkout] Invalid invitation:', invError || data?.error)
+                // Don't block checkout, just show message
+                setError(data?.error === 'ALREADY_CLAIMED'
+                    ? 'Deze uitnodiging is al geclaimd'
+                    : 'Uitnodiging niet geldig, maar je kunt nog wel tickets kopen')
+            } else {
+                setInvitation(data)
+                // Auto-select the invited ticket with quantity 1
+                if (data.ticket?.id) {
+                    setQuantities({ [data.ticket.id]: 1 })
+                }
+            }
+            setInvitationLoading(false)
+        }
+
+        loadInvitation()
+    }, [invitationToken])
+
     const handleQuantityChange = (ticketId: string, delta: number) => {
         const ticket = tickets.find(t => t.id === ticketId)
         if (!ticket) return
@@ -144,6 +230,42 @@ export function PublicEventCheckout() {
 
         // Clear validation errors when quantity changes
         setValidationErrors([])
+    }
+
+    // F015 S3: Product quantity handler
+    const handleProductQuantityChange = (productId: string, delta: number, variantId?: string) => {
+        const product = products.find(p => p.id === productId)
+        if (!product) return
+
+        setProductQuantities(prev => {
+            const current = prev[productId]?.quantity || 0
+            const maxAllowed = product.max_per_order
+            const newQty = Math.max(0, Math.min(maxAllowed, current + delta))
+
+            if (newQty === 0) {
+                const { [productId]: _, ...rest } = prev
+                return rest
+            }
+
+            return {
+                ...prev,
+                [productId]: {
+                    quantity: newQty,
+                    variantId: variantId ?? prev[productId]?.variantId
+                }
+            }
+        })
+    }
+
+    // F015 S3: Product variant selection handler
+    const handleProductVariantChange = (productId: string, variantId: string) => {
+        setProductQuantities(prev => ({
+            ...prev,
+            [productId]: {
+                quantity: prev[productId]?.quantity || 0,
+                variantId
+            }
+        }))
     }
 
     // Get max quantity for a ticket
@@ -182,11 +304,33 @@ export function PublicEventCheckout() {
         return `${ticket.distance_value} ${ticket.distance_unit || 'km'}`
     }
 
-    const totalItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0)
-    const totalPrice = tickets.reduce((sum, ticket) => {
+    // Ticket totals
+    const totalTicketItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0)
+
+    // F015 S3: Product totals
+    const totalProductItems = Object.values(productQuantities).reduce((sum, sel) => sum + sel.quantity, 0)
+
+    const totalItems = totalTicketItems + totalProductItems
+
+    // Invitation gives ACCESS to buy, NOT a discount - user pays full price!
+    const invitedTicketId = invitation?.ticket?.id
+
+    const ticketSubtotal = tickets.reduce((sum, ticket) => {
         const qty = quantities[ticket.id] || 0
         return sum + (ticket.price * qty)
     }, 0)
+
+    // F015 S3: Product subtotal
+    const productSubtotal = products.reduce((sum, product) => {
+        const sel = productQuantities[product.id]
+        if (!sel) return sum
+        return sum + (product.price * sel.quantity)
+    }, 0)
+
+    const subtotalPrice = ticketSubtotal + productSubtotal
+
+    // NO DISCOUNT - user pays full price
+    const totalPrice = subtotalPrice
 
     // Validate order before checkout
     const validateOrder = async (): Promise<boolean> => {
@@ -195,12 +339,24 @@ export function PublicEventCheckout() {
         setValidating(true)
         setValidationErrors([])
 
+        // Only validate ticket items (products validated by Edge Function)
         const items = Object.entries(quantities)
             .filter(([_, qty]) => qty > 0)
             .map(([ticketId, qty]) => ({
                 ticket_type_id: ticketId,
                 quantity: qty
             }))
+
+        // Skip ticket validation if only products are ordered
+        if (items.length === 0 && totalProductItems > 0) {
+            setValidating(false)
+            return true
+        }
+
+        if (items.length === 0) {
+            setValidating(false)
+            return true
+        }
 
         const { data, error: rpcError } = await supabase
             .rpc('validate_ticket_order', {
@@ -257,8 +413,9 @@ export function PublicEventCheckout() {
             return
         }
 
-        if (totalItems === 0) {
-            setError('Selecteer minimaal één ticket')
+        // F015 S3: Allow standalone products without tickets
+        if (totalTicketItems === 0 && totalProductItems === 0) {
+            setError('Selecteer minimaal één ticket of product')
             return
         }
 
@@ -267,14 +424,16 @@ export function PublicEventCheckout() {
         setValidationErrors([])
 
         try {
-            // Pre-validate order
-            const isValid = await validateOrder()
-            if (!isValid) {
-                setSubmitting(false)
-                return
+            // Pre-validate order (tickets only, products validated server-side)
+            if (totalTicketItems > 0) {
+                const isValid = await validateOrder()
+                if (!isValid) {
+                    setSubmitting(false)
+                    return
+                }
             }
 
-            // Build items array
+            // Build ticket items array
             const items = Object.entries(quantities)
                 .filter(([_, qty]) => qty > 0)
                 .map(([ticketId, qty]) => ({
@@ -282,13 +441,25 @@ export function PublicEventCheckout() {
                     quantity: qty
                 }))
 
+            // F015 S3: Build product items array
+            const productItems = Object.entries(productQuantities)
+                .filter(([_, sel]) => sel.quantity > 0)
+                .map(([productId, sel]) => ({
+                    product_id: productId,
+                    product_variant_id: sel.variantId || undefined,
+                    quantity: sel.quantity
+                }))
+
             // Call Edge Function with user email
+            // B011: Include invitation token (gives ACCESS to buy, NOT a discount)
             const { data, error: createError } = await supabase.functions.invoke('create-order-public', {
                 body: {
                     event_slug: eventSlug,
                     items,
+                    product_items: productItems.length > 0 ? productItems : undefined,
                     email: user.email,
                     purchaser_name: user.user_metadata?.full_name || null,
+                    invitation_token: invitationToken || undefined,
                 }
             })
 
@@ -297,10 +468,26 @@ export function PublicEventCheckout() {
                 throw new Error(createError.message)
             }
 
+            // Check for server-side error in response body
+            if (data?.error) {
+                console.error('[PublicEvent] Server error:', data.error, data.code)
+                throw new Error(data.error)
+            }
+
+            // For paid orders (total > 0), we MUST have a checkout URL
+            const isPaidOrder = totalPrice > 0
+
             // If there's a checkout URL (paid order), redirect to Mollie
             if (data?.checkout_url) {
+                console.log('[PublicEvent] Redirecting to Mollie checkout:', data.checkout_url)
                 window.location.href = data.checkout_url
                 return
+            }
+
+            // Paid order without checkout URL = error
+            if (isPaidOrder && !data?.checkout_url) {
+                console.error('[PublicEvent] Paid order but no checkout URL!', data)
+                throw new Error('Betaling kon niet worden gestart. Probeer het opnieuw.')
             }
 
             // Free order - redirect to confirmation
@@ -393,7 +580,7 @@ export function PublicEventCheckout() {
 
             <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Tickets */}
+                    {/* Tickets + Products */}
                     <div className="lg:col-span-2">
                         <h2 className="text-xl font-semibold text-gray-900 mb-4">Beschikbare tickets</h2>
 
@@ -487,6 +674,102 @@ export function PublicEventCheckout() {
                                 })}
                             </div>
                         )}
+
+                        {/* F015 S3: Products Section */}
+                        {products.length > 0 && (
+                            <>
+                                <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-4 flex items-center">
+                                    <Package className="h-5 w-5 mr-2 text-indigo-600" />
+                                    Extra's & producten
+                                </h2>
+                                <div className="space-y-4">
+                                    {products.map(product => {
+                                        const available = isProductAvailable(product)
+                                        const badge = getProductStatusBadge(product)
+                                        const disabled = !available
+                                        const currentSel = productQuantities[product.id]
+                                        const currentQty = currentSel?.quantity || 0
+                                        const hasVariants = product.variants && product.variants.length > 0
+
+                                        return (
+                                            <div
+                                                key={product.id}
+                                                className={`bg-white rounded-lg shadow p-6 ${disabled ? 'opacity-60' : ''}`}
+                                            >
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex-1">
+                                                        {/* Title + badges */}
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <h3 className="text-lg font-medium text-gray-900">{product.name}</h3>
+                                                            {product.category === 'ticket_upgrade' && (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                                                                    Ticket upgrade
+                                                                </span>
+                                                            )}
+                                                            {badge && (
+                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badge.className}`}>
+                                                                    {badge.text}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {product.description && (
+                                                            <p className="mt-1 text-sm text-gray-500">{product.description}</p>
+                                                        )}
+
+                                                        {/* Variant selector */}
+                                                        {hasVariants && !disabled && (
+                                                            <div className="mt-2">
+                                                                <select
+                                                                    value={currentSel?.variantId || ''}
+                                                                    onChange={(e) => handleProductVariantChange(product.id, e.target.value)}
+                                                                    className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500"
+                                                                >
+                                                                    <option value="">Kies variant...</option>
+                                                                    {product.variants.map(v => {
+                                                                        const variantSoldOut = v.available_capacity !== null && v.available_capacity <= 0
+                                                                        return (
+                                                                            <option key={v.id} value={v.id} disabled={variantSoldOut}>
+                                                                                {v.name}{variantSoldOut ? ' (uitverkocht)' : ''}
+                                                                            </option>
+                                                                        )
+                                                                    })}
+                                                                </select>
+                                                            </div>
+                                                        )}
+
+                                                        <p className="mt-2 text-2xl font-bold text-indigo-600">
+                                                            {product.price === 0 ? 'Gratis' : formatPrice(product.price)}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Quantity selector */}
+                                                    <div className="flex items-center space-x-3">
+                                                        <button
+                                                            onClick={() => handleProductQuantityChange(product.id, -1)}
+                                                            disabled={disabled || currentQty === 0}
+                                                            className="w-8 h-8 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        >
+                                                            −
+                                                        </button>
+                                                        <span className="w-8 text-center font-medium">
+                                                            {currentQty}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => handleProductQuantityChange(product.id, 1, hasVariants ? currentSel?.variantId : undefined)}
+                                                            disabled={disabled || currentQty >= product.max_per_order || (hasVariants && !currentSel?.variantId)}
+                                                            className="w-8 h-8 rounded-full border-2 border-indigo-600 bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        >
+                                                            +
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {/* Checkout Sidebar */}
@@ -494,15 +777,58 @@ export function PublicEventCheckout() {
                         <div className="bg-white rounded-lg shadow p-6 sticky top-8">
                             <h3 className="text-lg font-semibold text-gray-900 mb-4">Bestelling</h3>
 
-                            <div className="space-y-2 mb-4 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Tickets:</span>
-                                    <span className="font-medium">{totalItems}</span>
+                            {/* Invitation notice - NO DISCOUNT, just access */}
+                            {invitation && (
+                                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                    <div className="flex items-center">
+                                        <Gift className="h-5 w-5 text-blue-600 mr-2" />
+                                        <div>
+                                            <p className="text-sm font-medium text-blue-800">
+                                                Je bent uitgenodigd!
+                                            </p>
+                                            <p className="text-xs text-blue-600">
+                                                {invitation.ticket?.name} is voor jou geselecteerd
+                                            </p>
+                                        </div>
+                                        <CheckCircle className="h-5 w-5 text-blue-600 ml-auto" />
+                                    </div>
                                 </div>
-                                <div className="flex justify-between text-lg font-bold">
+                            )}
+
+                            <div className="space-y-2 mb-4 text-sm">
+                                {/* Ticket line items */}
+                                {tickets.filter(t => (quantities[t.id] || 0) > 0).map(ticket => (
+                                    <div key={ticket.id} className="flex justify-between">
+                                        <span className="text-gray-600">{quantities[ticket.id]}x {ticket.name}</span>
+                                        <span className="font-medium">{ticket.price === 0 ? 'Gratis' : `€${(ticket.price * quantities[ticket.id]).toFixed(2)}`}</span>
+                                    </div>
+                                ))}
+
+                                {/* Product line items */}
+                                {products.filter(p => (productQuantities[p.id]?.quantity || 0) > 0).map(product => {
+                                    const sel = productQuantities[product.id]
+                                    const variant = sel?.variantId ? product.variants.find(v => v.id === sel.variantId) : null
+                                    return (
+                                        <div key={product.id} className="flex justify-between">
+                                            <span className="text-gray-600">
+                                                {sel.quantity}x {product.name}
+                                                {variant && <span className="text-gray-400"> ({variant.name})</span>}
+                                            </span>
+                                            <span className="font-medium">
+                                                {product.price === 0 ? 'Gratis' : `€${(product.price * sel.quantity).toFixed(2)}`}
+                                            </span>
+                                        </div>
+                                    )
+                                })}
+
+                                {totalItems === 0 && (
+                                    <p className="text-gray-400 italic">Nog niets geselecteerd</p>
+                                )}
+
+                                <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-100">
                                     <span>Totaal:</span>
                                     <span className="text-indigo-600">
-                                        {totalPrice === 0 ? 'Gratis' : `€${totalPrice.toFixed(2)}`}
+                                        {totalPrice === 0 && totalItems > 0 ? 'Gratis' : totalItems === 0 ? '€0,00' : `€${totalPrice.toFixed(2)}`}
                                     </span>
                                 </div>
                             </div>
@@ -548,7 +874,7 @@ export function PublicEventCheckout() {
                                 ) : (
                                     <>
                                         <ShoppingCart className="inline mr-2 h-4 w-4" />
-                                        {totalPrice === 0 ? 'Gratis bestellen' : 'Afrekenen'}
+                                        {totalPrice === 0 && totalItems > 0 ? 'Gratis bestellen' : 'Afrekenen'}
                                     </>
                                 )}
                             </button>

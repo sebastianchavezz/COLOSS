@@ -4,8 +4,10 @@ import { supabase } from '../../lib/supabase'
 import { PublicHeader } from '../../components/PublicHeader'
 import { RouteMap } from '../../components/RouteMap'
 import { formatDistance } from '../../lib/gpx'
-import { MapPin, Calendar, Mail, ArrowLeft, Loader2, Ticket, AlertCircle, Map, Ruler, ChevronDown, HelpCircle, MessageCircle } from 'lucide-react'
+import { MapPin, Calendar, Mail, ArrowLeft, Loader2, Ticket, AlertCircle, Map, Ruler, ChevronDown, HelpCircle, MessageCircle, Package } from 'lucide-react'
 import { clsx } from 'clsx'
+import { getPublicProducts, formatPrice } from '../../data/products'
+import type { PublicProduct } from '../../types/products'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -85,6 +87,9 @@ export function PublicEventDetail() {
     // Route state
     const [route, setRoute] = useState<EventRoute | null>(null)
 
+    // Product preview state (F015 S3)
+    const [previewProducts, setPreviewProducts] = useState<PublicProduct[]>([])
+
     useEffect(() => {
         if (slug) {
             fetchEventDetail()
@@ -107,6 +112,18 @@ export function PublicEventDetail() {
             }
         } catch (err) {
             console.error('Error fetching FAQs:', err)
+        }
+    }, [])
+
+    // Fetch products preview (F015 S3)
+    const fetchProducts = useCallback(async (eventId: string) => {
+        try {
+            const { data } = await getPublicProducts(eventId)
+            if (data) {
+                setPreviewProducts(data)
+            }
+        } catch (err) {
+            console.error('Error fetching products:', err)
         }
     }, [])
 
@@ -147,6 +164,7 @@ export function PublicEventDetail() {
             // Fetch additional data
             fetchFaqs(response.event.id)
             fetchRoute(response.event.id)
+            fetchProducts(response.event.id)
         } else {
             setError('Failed to load event')
         }
@@ -284,7 +302,8 @@ export function PublicEventDetail() {
                                     <RouteMap
                                         geometry={route.route_geometry}
                                         bounds={route.bounds}
-                                        height="300px"
+                                        height="400px"
+                                        interactive={false}
                                     />
                                 </div>
                                 <div className="mt-2 flex items-center justify-center space-x-6 text-xs text-gray-500">
@@ -423,6 +442,31 @@ export function PublicEventDetail() {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+
+                            {/* F015 S3: Product Preview */}
+                            {previewProducts.length > 0 && (
+                                <div className="mt-6 pt-4 border-t border-gray-100">
+                                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                                        <Package className="h-4 w-4 mr-1.5 text-indigo-600" />
+                                        Extra's beschikbaar
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {previewProducts.slice(0, 4).map(product => (
+                                            <div key={product.id} className="flex justify-between text-sm">
+                                                <span className="text-gray-700">{product.name}</span>
+                                                <span className="text-gray-900 font-medium">
+                                                    {product.price === 0 ? 'Gratis' : formatPrice(product.price)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {previewProducts.length > 4 && (
+                                            <p className="text-xs text-gray-500">
+                                                +{previewProducts.length - 4} meer bij checkout
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 

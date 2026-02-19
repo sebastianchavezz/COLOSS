@@ -7,9 +7,17 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { QrCode, CheckCircle, XCircle, ArrowLeft, Loader2, AlertTriangle, Clock, BarChart3 } from 'lucide-react'
+import { QrCode, CheckCircle, XCircle, ArrowLeft, Loader2, AlertTriangle, Clock, BarChart3, Package } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { clsx } from 'clsx'
+
+interface OrderProduct {
+    product_name: string
+    product_category: string
+    variant_name: string | null
+    quantity: number
+    instructions: string | null
+}
 
 interface ScanResult {
     result: string  // VALID, INVALID, ALREADY_USED, etc.
@@ -20,6 +28,7 @@ interface ScanResult {
         participant_name: string | null
         participant_email: string | null
         checked_in_at: string
+        order_products?: OrderProduct[]
     }
 }
 
@@ -342,6 +351,33 @@ function ScanResultCard({ result }: { result: ScanResult }) {
                                     <span className="font-medium">Tijd:</span>{' '}
                                     {new Date(result.ticket.checked_in_at).toLocaleString('nl-NL')}
                                 </p>
+                            )}
+
+                            {/* F015 S3: Order products */}
+                            {result.ticket.order_products && result.ticket.order_products.length > 0 && (
+                                <div className="mt-4 pt-3 border-t border-gray-200">
+                                    <p className="text-sm font-medium text-gray-900 flex items-center">
+                                        <Package className="h-4 w-4 mr-1.5 text-indigo-600" />
+                                        Bestelde extra's:
+                                    </p>
+                                    <div className="mt-2 space-y-2">
+                                        {result.ticket.order_products.map((product, idx) => (
+                                            <div key={idx} className="text-sm bg-gray-50 rounded p-2">
+                                                <div className="flex justify-between">
+                                                    <span className="font-medium text-gray-800">
+                                                        {product.quantity}x {product.product_name}
+                                                    </span>
+                                                </div>
+                                                {product.variant_name && (
+                                                    <p className="text-gray-500 text-xs">Variant: {product.variant_name}</p>
+                                                )}
+                                                {product.instructions && (
+                                                    <p className="text-indigo-600 text-xs mt-1">{product.instructions}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}

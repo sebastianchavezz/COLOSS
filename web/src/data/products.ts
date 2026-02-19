@@ -461,11 +461,8 @@ export async function getPublicProducts(eventId: string, ticketTypeIds?: string[
         return { data: null, error }
     }
 
-    if (data?.error) {
-        return { data: null, error: new Error(data.message || data.error) }
-    }
-
-    return { data: data?.products as PublicProduct[] | null, error: null }
+    // get_public_products is a RETURNS TABLE RPC, so data IS the array directly
+    return { data: (Array.isArray(data) ? data : []) as PublicProduct[], error: null }
 }
 
 // =========================================
