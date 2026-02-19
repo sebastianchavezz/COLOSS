@@ -8,8 +8,8 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { QrCode, Calendar, MapPin, CheckCircle, XCircle, Clock, MessageSquare, Map, HelpCircle } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { QrCode, Calendar, MapPin, CheckCircle, XCircle, Clock, MessageSquare, Map, HelpCircle, Download } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -35,9 +35,26 @@ interface TicketWithEvent {
 
 export function MijnTickets() {
     const { user } = useAuth()
+    const [searchParams, setSearchParams] = useSearchParams()
     const [tickets, setTickets] = useState<TicketWithEvent[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedTicket, setSelectedTicket] = useState<TicketWithEvent | null>(null)
+    const [highlightedTicketId, setHighlightedTicketId] = useState<string | null>(null)
+
+    // Check for highlight param (from email invitation claim redirect)
+    useEffect(() => {
+        const highlightId = searchParams.get('highlight')
+        if (highlightId) {
+            setHighlightedTicketId(highlightId)
+            // Clear the URL param after reading it
+            setSearchParams({}, { replace: true })
+            // Remove highlight after 5 seconds
+            const timer = setTimeout(() => {
+                setHighlightedTicketId(null)
+            }, 5000)
+            return () => clearTimeout(timer)
+        }
+    }, [searchParams, setSearchParams])
 
     useEffect(() => {
         if (!user) return
@@ -120,6 +137,28 @@ export function MijnTickets() {
         return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(token)}`
     }
 
+    async function handleDownloadPDF(ticketId: string, eventName: string) {
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) return
+
+            const response = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ticket-pdf?ticket_id=${ticketId}`,
+                { headers: { Authorization: `Bearer ${session.access_token}` } }
+            )
+
+            if (!response.ok) throw new Error('Failed to generate ticket')
+
+            const html = await response.text()
+            const blob = new Blob([html], { type: 'text/html' })
+            const url = URL.createObjectURL(blob)
+            window.open(url, '_blank', 'noopener,noreferrer')
+            setTimeout(() => URL.revokeObjectURL(url), 60000)
+        } catch (err) {
+            console.error('PDF download error:', err)
+        }
+    }
+
     if (loading) {
         return (
             <div className="text-center py-12">
@@ -158,7 +197,11 @@ export function MijnTickets() {
                     {tickets.map((ticket) => (
                         <div
                             key={ticket.id}
-                            className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+                            className={`bg-white rounded-lg border overflow-hidden transition-all duration-300 ${
+                                highlightedTicketId === ticket.id
+                                    ? 'border-green-500 ring-2 ring-green-500 ring-opacity-50 shadow-lg shadow-green-100'
+                                    : 'border-gray-200'
+                            }`}
                         >
                             <div className="p-4">
                                 <div className="flex items-start justify-between">
@@ -196,6 +239,15 @@ export function MijnTickets() {
                                         <QrCode className="h-4 w-4" />
                                         QR Code
                                     </button>
+                                    {ticket.status === 'issued' && (
+                                        <button
+                                            onClick={() => handleDownloadPDF(ticket.id, ticket.order.event.name)}
+                                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-black"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            Download
+                                        </button>
+                                    )}
                                     <Link
                                         to={`/e/${ticket.order.event.slug}/route`}
                                         className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-black"
