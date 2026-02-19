@@ -2,14 +2,15 @@
 
 **ID**: F005
 **Status**: 🟢 Done
-**Total Sprints**: 2
-**Current Sprint**: Done
+**Total Sprints**: 3
+**Current Sprint**: S3 Complete
 
 ## Sprints
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | S1 | Atleta-style ticket configuration | 🟢 Complete |
 | S2 | Cart + quantity limits | 🟢 Complete |
+| S3 | Subscription-Based Tickets for Clubs (joint with F006 S6) | 🟢 Complete |
 
 ## Dependencies
 - **Requires**: F004
@@ -53,6 +54,13 @@ Zodat ik me kan inschrijven voor een evenement
 | `ticket_time_slots` | Start times/waves per ticket type |
 | `ticket_team_config` | Team configuration (min/max size, captain) |
 | `ticket_instances` | Issued tickets |
+| `ticket_types.is_subscription` | S3: Subscription flag |
+| `ticket_types.billing_interval` | S3: Billing interval (1 month / 3 months / 1 year) |
+| `ticket_types.billing_cycle_count` | S3: Fixed-term cycle count (NULL = open-ended) |
+| `ticket_types.subscription_description` | S3: Human-readable description |
+| `mollie_customers` | S3: Maps auth users to Mollie Customer objects |
+| `subscriptions` | S3: Core subscription lifecycle tracking |
+| `subscription_payments` | S3: Recurring payment audit trail |
 
 ### RLS Policies
 | Policy | Table | Rule |
@@ -142,9 +150,14 @@ Zodat ik me kan inschrijven voor een evenement
 | PublicEventCheckout | Done | `web/src/pages/public/PublicEventCheckout.tsx` |
 | S2 Tests | Done (12/12) | `tests/s2-integration-tests.sql` |
 | S2 Review | Done | `sprints/s2-review.md` |
+| S3 Plan | Done | `sprints/s3-plan.md` |
+| S3 Review | Done | `sprints/s3-review.md` |
+| S3 Migration | Done | `supabase/migrations/20260220000000_f005_f006_subscriptions.sql` |
+| S3 Tests | Done (22/22) | `tests/s3-subscription-tests.mjs` |
 
 ---
 
-*Last updated: 2026-01-28*
+*Last updated: 2026-02-19*
 *Sprint S1 completed: 2025-01-27*
 *Sprint S2 completed: 2026-01-28*
+*Sprint S3 completed: 2026-02-19*

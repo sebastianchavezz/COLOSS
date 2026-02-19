@@ -11,8 +11,8 @@
 | F002 | User Login/Auth | 🟢 | 1/1 | Done | ✅ |
 | F003 | Event Creation | 🟢 | 4/4 | S4 Modern Map Styles | ✅ |
 | F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
-| F005 | Ticket Selection | 🟢 | 2/2 | Done | ✅ |
-| F006 | Checkout/Payment | 🟢 | 4/4 | S4 Products Integration | ✅ |
+| F005 | Ticket Selection | 🟢 | 3/3 | S3 Subscription Tickets | ✅ |
+| F006 | Checkout/Payment | 🟢 | 6/6 | S6 Subscription Checkout | ✅ |
 | F007 | Ticket Delivery | 🟢 | 3/3 | S3 Email+PDF Complete | ✅ |
 | F008 | Communication | 🟢 | 2/2 | S2 Transactional Email Integration | ✅ |
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
@@ -88,6 +88,7 @@ F001 (User Registration)
 | 4 | Checkout | F006, F007 | 🟡 Partial (F007 S2 done) |
 | 5 | Support | F008, F009 | 🟢 Complete |
 | 6 | Products | F015 | 🟢 Complete |
+| 7 | Subscriptions | F005 S3, F006 S6 | 🟢 Complete |
 
 ## Directory Structure
 

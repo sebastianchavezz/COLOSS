@@ -2,8 +2,8 @@
 
 **ID**: F006
 **Status**: 🟢 Done
-**Total Sprints**: 4
-**Current Sprint**: S4 Complete
+**Total Sprints**: 6
+**Current Sprint**: S6 Complete
 
 ## Sprints
 | Sprint | Focus | Status |
@@ -12,6 +12,8 @@
 | S2 | Mollie Sandbox Integration upgrade | 🟢 |
 | S3 | Waterdichte Mollie Integration (best practices) | 🟢 |
 | S4 | Products Integration (F015 - upgrades & merchandise) | 🟢 |
+| S5 | Boekhoudkundige Verplichtingen (Accounting) | 🟢 |
+| S6 | Subscription-Based Tickets for Clubs (joint with F005 S3) | 🟢 |
 
 ## Dependencies
 - **Requires**: F005 (Ticket Selection), F015 (Products)
@@ -185,6 +187,57 @@ Sources:
 - [Mollie Webhooks](https://docs.mollie.com/reference/webhooks)
 - [Mollie Testing](https://docs.mollie.com/reference/testing)
 
+## S6: Subscription-Based Tickets for Clubs (NEW)
+
+Joint sprint with F005 S3. Adds recurring subscription billing via Mollie.
+
+### New Edge Functions
+| Function | Purpose | Status |
+|----------|---------|--------|
+| `create-subscription-checkout` | First payment with Mollie sequenceType "first" | 🟢 |
+| `manage-subscription` | Cancel and list user subscriptions | 🟢 |
+
+### Modified Edge Functions
+| Function | Change | Status |
+|----------|--------|--------|
+| `mollie-webhook` | Added subscription payment detection (subscriptionId + metadata) | 🟢 |
+
+### New Shared Helpers
+| File | Purpose |
+|------|---------|
+| `_shared/mollie.ts` | Mollie Customer, Mandate, Subscription CRUD, First Payment |
+
+### Subscription Flow
+```
+[Select Club Ticket] --> [Login Required] --> [create-subscription-checkout]
+       |                                          |
+       v                                          v
+[First Payment (Mollie)]  <-- sequenceType: "first"
+       |                       creates mandate
+       v
+[Webhook: mandate created] --> [Create Mollie Subscription]
+       |
+       v
+[Mollie auto-charges at interval]
+       |
+       v
+[mollie-webhook receives tr_xxx] --> [detect subscriptionId]
+       |                                    |
+       v                                    v
+[handle_subscription_payment RPC]    [Renew ticket_instance]
+```
+
+### Security Review
+- All 5 review issues fixed before merge
+- RLS deny policies on all write operations
+- Role-based authorization (owner/admin) for cancel
+- Idempotent webhook handling with ON CONFLICT guards
+- See: `f005-ticket-selection/sprints/s3-review.md`
+
+### Tests
+- 22/22 integration tests passing
+- See: `f005-ticket-selection/tests/s3-subscription-tests.mjs`
+
 ---
 
-*Last updated: 2026-02-03*
+*Last updated: 2026-02-19*

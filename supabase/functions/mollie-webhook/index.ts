@@ -1,7 +1,7 @@
 /**
  * mollie-webhook Edge Function
  *
- * Processes Mollie payment AND refund webhook notifications.
+ * Processes Mollie payment, refund, AND subscription webhook notifications.
  * Called by Mollie when a payment or refund status changes.
  *
  * MOLLIE BEST PRACTICES IMPLEMENTED:
@@ -16,6 +16,7 @@
  * 1. Parse webhook (form data with payment/refund ID)
  * 2. Detect type: payment (tr_xxx) or refund (re_xxx)
  * 3. Re-fetch from Mollie API with timeout (verification + authoritative status)
+ * 3.5. If payment has subscriptionId → route to subscription handler
  * 4. Idempotency check via payment_events
  * 5. Call appropriate RPC
  * 6. Mark event as processed
@@ -28,6 +29,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { handleCors, corsHeaders } from '../_shared/cors.ts'
 import { getServiceClient } from '../_shared/supabase.ts'
 import { createLogger } from '../_shared/logger.ts'
+import {
+    getCustomerMandate,
+    createMollieSubscription,
+} from '../_shared/mollie.ts'
 
 const MOLLIE_API_URL = "https://api.mollie.com/v2"
 const MOLLIE_FETCH_TIMEOUT_MS = 10000  // 10 seconds (Mollie times out at 15s)
@@ -147,6 +152,25 @@ serve(async (req: Request) => {
         }
 
         const { status, metadata } = molliePayment
+
+        // ========== SUBSCRIPTION PAYMENT DETECTION ==========
+        // Mollie adds subscriptionId to payments created by a subscription.
+        // Also detect first payments for subscription setup via metadata.
+        const mollieSubscriptionId = molliePayment.subscriptionId
+        const isSubscriptionSetup = metadata?.subscription_setup === 'true'
+
+        if (mollieSubscriptionId || isSubscriptionSetup) {
+            logger.info('Subscription payment detected', {
+                paymentId: idStr,
+                subscriptionId: mollieSubscriptionId,
+                isSetup: isSubscriptionSetup,
+                status,
+            })
+            return await handleSubscriptionPaymentWebhook(
+                idStr, molliePayment, mollieSubscriptionId, supabaseAdmin, mollieApiKey, logger, startTime
+            )
+        }
+
         const orderId = metadata?.order_id
 
         if (!orderId) {
@@ -255,6 +279,388 @@ serve(async (req: Request) => {
         return new Response('Internal Server Error', { status: 500, headers: corsHeaders })
     }
 })
+
+/**
+ * Handle subscription-related payment webhook from Mollie
+ *
+ * Two scenarios:
+ * 1. First payment (subscription_setup): mandate is being established
+ *    - When paid: fetch mandate, create Mollie subscription, activate our subscription
+ * 2. Recurring payment: Mollie auto-charged via subscription
+ *    - When paid: call handle_subscription_payment RPC
+ *    - When failed: call handle_subscription_failure RPC
+ */
+async function handleSubscriptionPaymentWebhook(
+    paymentId: string,
+    molliePayment: any,
+    mollieSubscriptionId: string | undefined,
+    supabaseAdmin: any,
+    mollieApiKey: string,
+    logger: any,
+    startTime: number
+): Promise<Response> {
+    const { status, metadata } = molliePayment
+    const orderId = metadata?.order_id
+    const isSubscriptionSetup = metadata?.subscription_setup === 'true'
+
+    // Idempotency check
+    const eventKey = `sub:${paymentId}:${status}`
+    const { error: eventError } = await supabaseAdmin
+        .from('payment_events')
+        .insert({
+            provider: 'mollie',
+            provider_event_id: eventKey,
+            provider_payment_id: paymentId,
+            event_type: `subscription_payment.${status}`,
+            payload: molliePayment,
+            processed_at: null,
+        })
+
+    if (eventError) {
+        if (eventError.code === '23505') {
+            logger.info('Subscription event already processed (idempotent)', { eventKey })
+            return new Response('OK', { status: 200, headers: corsHeaders })
+        }
+        logger.error('DB Error inserting subscription payment_event', {
+            error: eventError.message,
+            code: eventError.code,
+            eventKey,
+        })
+        return new Response('Database Error', { status: 500, headers: corsHeaders })
+    }
+
+    if (isSubscriptionSetup) {
+        // ========== FIRST PAYMENT (subscription setup) ==========
+        return await handleFirstPayment(
+            paymentId, molliePayment, supabaseAdmin, mollieApiKey, logger, startTime, eventKey
+        )
+    } else if (mollieSubscriptionId) {
+        // ========== RECURRING PAYMENT ==========
+        return await handleRecurringPayment(
+            paymentId, molliePayment, mollieSubscriptionId, supabaseAdmin, logger, startTime, eventKey
+        )
+    }
+
+    logger.warn('Subscription payment but no setup flag or subscriptionId', { paymentId })
+    return new Response('OK', { status: 200, headers: corsHeaders })
+}
+
+/**
+ * Handle the FIRST payment for a subscription setup.
+ * When paid: mandate established → create Mollie subscription → activate our subscription.
+ */
+async function handleFirstPayment(
+    paymentId: string,
+    molliePayment: any,
+    supabaseAdmin: any,
+    mollieApiKey: string,
+    logger: any,
+    startTime: number,
+    eventKey: string
+): Promise<Response> {
+    const { status, metadata } = molliePayment
+    const orderId = metadata?.order_id
+    const ticketTypeId = metadata?.ticket_type_id
+
+    if (status === 'paid') {
+        logger.info('First subscription payment PAID — setting up recurring', { paymentId, orderId })
+
+        // 1. Update order to paid
+        if (orderId) {
+            const { data: webhookResult, error: rpcError } = await supabaseAdmin.rpc('handle_payment_webhook', {
+                _order_id: orderId,
+                _payment_id: paymentId,
+                _status: status,
+                _amount: parseFloat(molliePayment.amount?.value || '0'),
+                _currency: molliePayment.amount?.currency || 'EUR'
+            })
+
+            if (rpcError) {
+                logger.error('RPC handle_payment_webhook failed for subscription setup', {
+                    error: rpcError.message,
+                    orderId,
+                })
+            } else {
+                logger.info('Order updated to paid for subscription setup', { orderId, result: webhookResult })
+            }
+        }
+
+        // 2. Find our subscription by first_order_id
+        const { data: subscription, error: subError } = await supabaseAdmin
+            .from('subscriptions')
+            .select('*')
+            .eq('first_order_id', orderId)
+            .single()
+
+        if (subError || !subscription) {
+            logger.error('Subscription not found for first payment', { orderId, error: subError })
+            // Mark processed and return 200 — manual fix needed
+            await markProcessed(supabaseAdmin, eventKey)
+            return new Response('OK', { status: 200, headers: corsHeaders })
+        }
+
+        // 3. Get or verify mandate
+        const mandate = await getCustomerMandate(subscription.mollie_customer_id)
+        if (mandate) {
+            logger.info('Mandate found', {
+                mandateId: mandate.id,
+                status: mandate.status,
+                method: mandate.method,
+            })
+
+            // Update mollie_customers with mandate info
+            await supabaseAdmin
+                .from('mollie_customers')
+                .update({
+                    mollie_mandate_id: mandate.id,
+                    mandate_status: mandate.status,
+                })
+                .eq('mollie_customer_id', subscription.mollie_customer_id)
+        } else {
+            logger.warn('No mandate found after first payment — may still be pending', {
+                customerId: subscription.mollie_customer_id,
+            })
+        }
+
+        // 4. Create Mollie subscription for recurring charges
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        try {
+            const mollieSubResult = await createMollieSubscription({
+                customerId: subscription.mollie_customer_id,
+                amount: {
+                    currency: subscription.currency || 'EUR',
+                    value: parseFloat(subscription.amount).toFixed(2),
+                },
+                interval: subscription.billing_interval,
+                description: `Abonnement ${subscription.id.slice(0, 8)}`,
+                times: subscription.billing_cycle_count || undefined,
+                webhookUrl: `${supabaseUrl}/functions/v1/mollie-webhook`,
+                metadata: {
+                    subscription_id: subscription.id,
+                    event_id: subscription.event_id,
+                    org_id: subscription.org_id,
+                },
+            })
+
+            logger.info('Mollie subscription created', {
+                mollieSubscriptionId: mollieSubResult.id,
+                status: mollieSubResult.status,
+            })
+
+            // 5. Activate our subscription
+            // Use Mollie's nextPaymentDate as authoritative period end
+            // (avoids hardcoded day approximations that drift from calendar math)
+            const now = new Date()
+            const mollieNextPayment = mollieSubResult.nextPaymentDate  // ISO date from Mollie
+            const periodEnd = mollieNextPayment
+                ? new Date(mollieNextPayment + 'T00:00:00Z')
+                : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)  // Fallback only
+
+            await supabaseAdmin
+                .from('subscriptions')
+                .update({
+                    mollie_subscription_id: mollieSubResult.id,
+                    status: 'active',
+                    started_at: now.toISOString(),
+                    current_period_start: now.toISOString(),
+                    current_period_end: periodEnd.toISOString(),
+                    next_payment_date: mollieNextPayment || periodEnd.toISOString().split('T')[0],
+                    cycles_completed: 1,
+                    ends_at: subscription.billing_cycle_count
+                        ? mollieSubResult.times
+                            ? null  // Mollie handles termination for fixed-term
+                            : null
+                        : null,
+                })
+                .eq('id', subscription.id)
+
+            // 6. Issue first ticket instance
+            const { error: ticketError } = await supabaseAdmin
+                .from('ticket_instances')
+                .insert({
+                    event_id: subscription.event_id,
+                    ticket_type_id: subscription.ticket_type_id,
+                    order_id: orderId,
+                    owner_user_id: subscription.user_id,
+                    qr_code: 'sub_' + crypto.randomUUID(),
+                    status: 'issued',
+                })
+
+            if (ticketError) {
+                logger.error('Failed to issue first subscription ticket', ticketError)
+            } else {
+                logger.info('First subscription ticket issued')
+            }
+
+            // 7. Record first subscription payment
+            await supabaseAdmin
+                .from('subscription_payments')
+                .insert({
+                    subscription_id: subscription.id,
+                    order_id: orderId,
+                    mollie_payment_id: paymentId,
+                    status: 'paid',
+                    amount: parseFloat(subscription.amount),
+                    currency: subscription.currency || 'EUR',
+                    period_start: now.toISOString(),
+                    period_end: periodEnd.toISOString(),
+                    cycle_number: 1,
+                })
+
+            logger.info('Subscription activated successfully', {
+                subscriptionId: subscription.id,
+                mollieSubscriptionId: mollieSubResult.id,
+            })
+
+        } catch (mollieErr) {
+            logger.error('Failed to create Mollie subscription', mollieErr)
+            // Update subscription to reflect failure — mandate may not be ready yet
+            await supabaseAdmin
+                .from('subscriptions')
+                .update({ status: 'suspended' })
+                .eq('id', subscription.id)
+        }
+
+    } else if (status === 'failed' || status === 'expired' || status === 'canceled') {
+        logger.info('First subscription payment FAILED', { paymentId, status })
+
+        // Update order if exists
+        if (orderId) {
+            await supabaseAdmin.rpc('handle_payment_webhook', {
+                _order_id: orderId,
+                _payment_id: paymentId,
+                _status: status,
+                _amount: parseFloat(molliePayment.amount?.value || '0'),
+                _currency: molliePayment.amount?.currency || 'EUR',
+            })
+        }
+
+        // Cancel the pending subscription
+        const { data: sub } = await supabaseAdmin
+            .from('subscriptions')
+            .select('id')
+            .eq('first_order_id', orderId)
+            .single()
+
+        if (sub) {
+            await supabaseAdmin
+                .from('subscriptions')
+                .update({
+                    status: 'cancelled',
+                    cancelled_at: new Date().toISOString(),
+                    cancel_reason: `First payment ${status}`,
+                })
+                .eq('id', sub.id)
+        }
+    }
+
+    // Mark event as processed
+    await markProcessed(supabaseAdmin, eventKey)
+
+    const duration = Date.now() - startTime
+    logger.info('Subscription first payment webhook completed', { paymentId, status, durationMs: duration })
+    return new Response('OK', { status: 200, headers: corsHeaders })
+}
+
+/**
+ * Handle a RECURRING payment from a Mollie subscription.
+ */
+async function handleRecurringPayment(
+    paymentId: string,
+    molliePayment: any,
+    mollieSubscriptionId: string,
+    supabaseAdmin: any,
+    logger: any,
+    startTime: number,
+    eventKey: string
+): Promise<Response> {
+    const { status } = molliePayment
+
+    // Find our subscription by mollie_subscription_id
+    const { data: subscription, error: subError } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('mollie_subscription_id', mollieSubscriptionId)
+        .single()
+
+    if (subError || !subscription) {
+        logger.error('Subscription not found for recurring payment', {
+            mollieSubscriptionId,
+            paymentId,
+        })
+        await markProcessed(supabaseAdmin, eventKey)
+        return new Response('OK', { status: 200, headers: corsHeaders })
+    }
+
+    if (status === 'paid') {
+        logger.info('Recurring subscription payment PAID', {
+            paymentId,
+            subscriptionId: subscription.id,
+        })
+
+        // Call RPC to handle subscription payment (creates order, issues ticket, etc.)
+        const { data: result, error: rpcError } = await supabaseAdmin.rpc('handle_subscription_payment', {
+            _subscription_id: subscription.id,
+            _mollie_payment_id: paymentId,
+            _amount: parseFloat(molliePayment.amount?.value || '0'),
+            _currency: molliePayment.amount?.currency || 'EUR',
+        })
+
+        if (rpcError) {
+            logger.error('RPC handle_subscription_payment failed', {
+                error: rpcError.message,
+                subscriptionId: subscription.id,
+            })
+            return new Response('Transaction Failed', { status: 500, headers: corsHeaders })
+        }
+
+        logger.info('Subscription payment processed', { result })
+
+    } else if (status === 'failed' || status === 'expired') {
+        logger.info('Recurring subscription payment FAILED', {
+            paymentId,
+            subscriptionId: subscription.id,
+            status,
+        })
+
+        // Call RPC to handle failure
+        const { error: failError } = await supabaseAdmin.rpc('handle_subscription_failure', {
+            _subscription_id: subscription.id,
+            _mollie_payment_id: paymentId,
+            _failure_reason: `Payment ${status}`,
+        })
+
+        if (failError) {
+            logger.error('RPC handle_subscription_failure failed', {
+                error: failError.message,
+                subscriptionId: subscription.id,
+            })
+        }
+    }
+
+    // Mark event as processed
+    await markProcessed(supabaseAdmin, eventKey)
+
+    const duration = Date.now() - startTime
+    logger.info('Recurring subscription webhook completed', {
+        paymentId,
+        mollieSubscriptionId,
+        status,
+        durationMs: duration,
+    })
+    return new Response('OK', { status: 200, headers: corsHeaders })
+}
+
+/**
+ * Mark a payment_event as processed
+ */
+async function markProcessed(supabaseAdmin: any, eventKey: string): Promise<void> {
+    await supabaseAdmin
+        .from('payment_events')
+        .update({ processed_at: new Date().toISOString() })
+        .eq('provider', 'mollie')
+        .eq('provider_event_id', eventKey)
+}
 
 /**
  * Handle refund webhook from Mollie
