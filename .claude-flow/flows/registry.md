@@ -15,7 +15,7 @@
 | F006 | Checkout/Payment | 🟢 | 7/7 | S7 Ticket Flow Waterdicht | ✅ |
 | F007 | Ticket Delivery | 🟢 | 3/3 | S3 Email+PDF Complete | ✅ |
 | F008 | Communication | 🟢 | 2/2 | S2 Transactional Email Integration | ✅ |
-| F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
+| F009 | Refund Flow | 🟢 | 2/2 | S2 Refund Waterdicht | ✅ |
 | F010 | Organizer Dashboard | 🟢 | 3/3 | S3 Subscription Dashboard | ✅ |
 | F011 | Participants/Registrations | 🟢 | 1/1 | Done | ✅ |
 | F012 | Event Communication (Messaging + FAQ) | 🟢 | 3/3 | S3 Open Chat | ✅ |
@@ -172,4 +172,4 @@ F001 (User Registration)
 
 ---
 
-*Last updated: 2026-02-20 (F006 S7 Ticket Flow Waterdicht)*
+*Last updated: 2026-02-20 (F009 S2 Refund Flow Waterdicht)*

@@ -34,6 +34,7 @@ Implementeer een waterdichte refund flow die organizers in staat stelt om bestel
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | S1 | Database + Mollie Integration | 🟢 Done |
+| S2 | Refund Flow Waterdicht | 🟢 Done |
 
 ## Implemented Components
 
@@ -54,7 +55,8 @@ Implementeer een waterdichte refund flow die organizers in staat stelt om bestel
 - `mollie-webhook`: Extended to handle refund webhooks
 
 ### Tests
-- 10/10 integration tests passing
+- S1: 10/10 integration tests passing
+- S2: 13/13 waterdicht tests passing
 
 ## Technical Design
 
@@ -74,4 +76,30 @@ Implementeer een waterdichte refund flow die organizers in staat stelt om bestel
 
 ---
 
+## S2 Waterdicht Fixes (2026-02-20)
+
+### Critical Fix: Mollie API Endpoint
+- `mollie-webhook/handleRefundWebhook` used `GET /v2/refunds/{id}` which does NOT exist
+- Fixed to: DB lookup first → `GET /v2/payments/{paymentId}/refunds/{refundId}`
+- **Without this fix, every refund webhook silently failed with 404**
+
+### Order Status Transition
+- `handle_refund_webhook` RPC now updates order status `paid → refunded` on full refund
+- Previously, orders stayed on `paid` even after full refund
+
+### Status Mapping Fix
+- `create-refund` now correctly maps Mollie `failed` and `canceled` statuses
+- Previously both were mapped to `processing`
+
+### Complete Chain (Fixed)
+```
+Organizer → create-refund → Mollie API → webhook →
+  DB lookup (get paymentId) → Mollie verify →
+  handle_refund_webhook RPC → void tickets + update order →
+  queue_refund_confirmation_email → process-outbox → email sent
+```
+
+---
+
 *Created: 2026-01-28*
+*Updated: 2026-02-20 (S2 Waterdicht)*
