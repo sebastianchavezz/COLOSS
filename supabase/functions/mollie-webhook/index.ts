@@ -664,6 +664,14 @@ async function markProcessed(supabaseAdmin: any, eventKey: string): Promise<void
 
 /**
  * Handle refund webhook from Mollie
+ *
+ * FIX (F009 S2): The Mollie Refunds API requires the paymentId in the URL:
+ *   GET /v2/payments/{paymentId}/refunds/{refundId}
+ * The old code used GET /v2/refunds/{refundId} which does NOT exist,
+ * causing every refund webhook to silently fail with 404.
+ *
+ * Solution: look up the refund in our DB first to get mollie_payment_id,
+ * then use the correct endpoint.
  */
 async function handleRefundWebhook(
     mollieRefundId: string,
@@ -674,11 +682,38 @@ async function handleRefundWebhook(
 ): Promise<Response> {
     logger.info('Processing REFUND webhook', { refundId: mollieRefundId })
 
-    // Fetch refund from Mollie with timeout
+    // Step 0: Look up the refund in our DB to get the mollie_payment_id
+    // This is needed because Mollie's refund endpoint requires the payment ID
+    const { data: localRefund, error: lookupError } = await supabaseAdmin
+        .from('refunds')
+        .select('id, mollie_payment_id, order_id')
+        .eq('mollie_refund_id', mollieRefundId)
+        .maybeSingle()
+
+    if (lookupError) {
+        logger.error('DB lookup for refund failed', { error: lookupError.message })
+        return new Response('Database Error', { status: 500, headers: corsHeaders })
+    }
+
+    if (!localRefund || !localRefund.mollie_payment_id) {
+        // Refund not found in our DB - return 200 (security: don't leak info)
+        logger.warn('Refund not found in local DB (returning 200)', { refundId: mollieRefundId })
+        return new Response('OK', { status: 200, headers: corsHeaders })
+    }
+
+    const molliePaymentId = localRefund.mollie_payment_id
+    logger.info('Found local refund', {
+        refundId: mollieRefundId,
+        paymentId: molliePaymentId,
+        orderId: localRefund.order_id
+    })
+
+    // Step 1: Fetch refund from Mollie with CORRECT endpoint
+    // FIX: /v2/payments/{paymentId}/refunds/{refundId} (NOT /v2/refunds/{refundId})
     let mollieRefund: any
     try {
         const refundResponse = await fetchWithTimeout(
-            `${MOLLIE_API_URL}/refunds/${mollieRefundId}`,
+            `${MOLLIE_API_URL}/payments/${molliePaymentId}/refunds/${mollieRefundId}`,
             { headers: { 'Authorization': `Bearer ${mollieApiKey}` } },
             MOLLIE_FETCH_TIMEOUT_MS
         )
@@ -692,7 +727,8 @@ async function handleRefundWebhook(
         if (!refundResponse.ok) {
             logger.error('Mollie refund fetch failed', {
                 status: refundResponse.status,
-                refundId: mollieRefundId
+                refundId: mollieRefundId,
+                paymentId: molliePaymentId
             })
             return new Response('Mollie API Error', { status: 502, headers: corsHeaders })
         }

@@ -337,7 +337,11 @@ serve(async (req: Request) => {
       .from("refunds")
       .update({
         mollie_refund_id: mollieRefund.id,
-        status: mollieStatus === "refunded" ? "refunded" : mollieStatus === "queued" ? "queued" : "processing",
+        status: mollieStatus === "refunded" ? "refunded"
+             : mollieStatus === "queued" ? "queued"
+             : mollieStatus === "failed" ? "failed"
+             : mollieStatus === "canceled" ? "canceled"
+             : "processing",
         refunded_at: mollieStatus === "refunded" ? new Date().toISOString() : null,
       })
       .eq("id", refund.id);
