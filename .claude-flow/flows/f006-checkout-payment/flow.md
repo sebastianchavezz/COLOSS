@@ -2,8 +2,8 @@
 
 **ID**: F006
 **Status**: 🟢 Done
-**Total Sprints**: 6
-**Current Sprint**: S6 Complete
+**Total Sprints**: 7
+**Current Sprint**: S7 Complete
 
 ## Sprints
 | Sprint | Focus | Status |
@@ -14,6 +14,7 @@
 | S4 | Products Integration (F015 - upgrades & merchandise) | 🟢 |
 | S5 | Boekhoudkundige Verplichtingen (Accounting) | 🟢 |
 | S6 | Subscription-Based Tickets for Clubs (joint with F005 S3) | 🟢 |
+| S7 | Ticket Flow Waterdicht (security + correctness fixes) | 🟢 |
 
 ## Dependencies
 - **Requires**: F005 (Ticket Selection), F015 (Products)
@@ -153,7 +154,8 @@ interface ProductItem {
 ## Test Results
 - S1-S3: 25/25 tests passed
 - S4: See `tests/s4-products-integration.mjs`
-- Coverage: schema, RPCs, edge functions, RLS, capacity validation, products
+- S7: 16/16 tests passed (`tests/s7-waterdicht-tests.mjs`)
+- Coverage: schema, RPCs, edge functions, RLS, capacity validation, products, security
 
 ## Mollie Sandbox Testing (S2)
 
@@ -238,6 +240,48 @@ Joint sprint with F005 S3. Adds recurring subscription billing via Mollie.
 - 22/22 integration tests passing
 - See: `f005-ticket-selection/tests/s3-subscription-tests.mjs`
 
+## S7: Ticket Flow Waterdicht (Security + Correctness)
+
+Critical fixes to make the ticket flow production-ready.
+
+### P0 Fixes (KRITIEK)
+| Fix | Problem | Solution |
+|-----|---------|----------|
+| QR code generation | token_hash and qr_code from 2 different UUIDs = unscannable | LATERAL subquery: 1 UUID per ticket, both derived |
+| void_tickets_for_refund | Wrong enum 'voided', non-existent columns | Fixed to 'void', removed voided_at/voided_reason |
+| INSERT RLS lockdown | WITH CHECK (true) = any user can create fake tickets | WITH CHECK (false) on ticket_instances + tickets |
+| Transfer Edge Functions | Wrong table (tickets), wrong columns, missing fields | Full rewrite against actual remote schema |
+
+### P1 Fixes (HOOG)
+| Fix | Problem | Solution |
+|-----|---------|----------|
+| Overbooked handling | No email/audit on overbooked order | Added email_outbox INSERT + audit_log |
+| Expired transfers | Pending transfers never expire | New cleanup_expired_transfers function |
+| Stale orders | cleanup_stale_pending_orders never called | New cleanup-jobs Edge Function |
+| Token backfill | Existing tickets had mismatched hashes | Migration backfills 5 existing tickets |
+
+### Security Review
+- All 7 review issues found and fixed
+- RLS INSERT policies locked (WITH CHECK false)
+- Transfer token not leaked to sender
+- Recipient email verified on accept
+- cleanup-jobs requires service role Bearer token
+
+### New Edge Functions
+| Function | Purpose | Status |
+|----------|---------|--------|
+| `cleanup-jobs` | Periodic cleanup: stale orders + expired transfers | 🟢 |
+
+### Modified Edge Functions
+| Function | Change | Status |
+|----------|--------|--------|
+| `initiate-transfer` | Full rewrite: ticket_instances, token generation, all required fields | 🟢 |
+| `accept-transfer` | Full rewrite: correct column names, email verification, user_metadata | 🟢 |
+
+### Tests
+- 16/16 integration tests passing
+- See: `tests/s7-waterdicht-tests.mjs`
+
 ---
 
-*Last updated: 2026-02-19*
+*Last updated: 2026-02-20*

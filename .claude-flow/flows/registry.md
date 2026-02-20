@@ -12,7 +12,7 @@
 | F003 | Event Creation | 🟢 | 4/4 | S4 Modern Map Styles | ✅ |
 | F004 | Event Discovery | 🟢 | 1/1 | Done | ✅ |
 | F005 | Ticket Selection | 🟢 | 3/3 | S3 Subscription Tickets | ✅ |
-| F006 | Checkout/Payment | 🟢 | 6/6 | S6 Subscription Checkout | ✅ |
+| F006 | Checkout/Payment | 🟢 | 7/7 | S7 Ticket Flow Waterdicht | ✅ |
 | F007 | Ticket Delivery | 🟢 | 3/3 | S3 Email+PDF Complete | ✅ |
 | F008 | Communication | 🟢 | 2/2 | S2 Transactional Email Integration | ✅ |
 | F009 | Refund Flow | 🟢 | 1/1 | Done | ✅ |
@@ -22,7 +22,7 @@
 | F013 | Invitation System | 🟢 | 1/1 | Done | ✅ |
 | F014 | Team Management (RBAC) | 🟢 | 1/1 | Done | ✅ |
 | F015 | Products (Upgrades & Merchandise) | 🟢 | 3/3 | S3 Product Upsell Flow | ✅ |
-| F016 | Participant Profile | 🟢 | 1/1 | Done | ✅ |
+| F016 | Participant Profile | 🟢 | 2/2 | S2 Read-Only Modal UX | ✅ |
 | F017 | Embeddable Widget | 🟢 | 1/1 | Done | ✅ |
 
 ## Status Legend
@@ -172,4 +172,4 @@ F001 (User Registration)
 
 ---
 
-*Last updated: 2026-02-19 (F010 S3 complete)*
+*Last updated: 2026-02-20 (F006 S7 Ticket Flow Waterdicht)*

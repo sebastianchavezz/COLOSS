@@ -1,17 +1,20 @@
 /**
- * accept-transfer Edge Function
+ * accept-transfer Edge Function (V2 - Rewritten for ticket_transfers V2 schema)
  *
  * Allows a ticket recipient to accept a pending transfer.
  * Uses a secure transfer token to verify the transfer request.
  *
  * Flow:
  * 1. Authenticate user
- * 2. Validate transfer token (SHA-256 hash)
+ * 2. Validate transfer token (SHA-256 hash lookup)
  * 3. Check transfer status (pending) and expiry
  * 4. Resolve or create recipient participant
- * 5. Call RPC to atomically complete transfer
+ * 5. Call complete_ticket_transfer RPC atomically
  *
- * Security: Token-based verification with expiry
+ * Security:
+ * - Token-based verification with expiry
+ * - Atomic RPC prevents race conditions
+ * - State machine enforces valid transitions
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -56,7 +59,7 @@ serve(async (req: Request) => {
             return errorResponse('Missing transfer_token', 'MISSING_TOKEN', 400)
         }
 
-        // 3. HASH THE TOKEN (SHA-256)
+        // 3. HASH THE TOKEN (SHA-256) - must match how initiate-transfer stores it
         const tokenBytes = new TextEncoder().encode(transfer_token)
         const hashBuffer = await crypto.subtle.digest('SHA-256', tokenBytes)
         const tokenHash = Array.from(new Uint8Array(hashBuffer))
@@ -70,7 +73,7 @@ serve(async (req: Request) => {
 
         const { data: transfer, error: transferError } = await supabaseAdmin
             .from('ticket_transfers')
-            .select('id, ticket_instance_id, from_participant_id, to_participant_id, to_email, status, expires_at')
+            .select('id, ticket_instance_id, from_participant_id, to_participant_id, to_email, status, expires_at, event_id, org_id')
             .eq('transfer_token_hash', tokenHash)
             .single()
 
@@ -82,51 +85,85 @@ serve(async (req: Request) => {
         logger.info('Transfer found', transfer.id)
 
         // 5. VALIDATE TRANSFER STATUS (Idempotency)
+        if (transfer.status === 'accepted') {
+            logger.info('Transfer already accepted')
+            return jsonResponse({
+                success: true,
+                transfer_id: transfer.id,
+                ticket_instance_id: transfer.ticket_instance_id,
+                message: 'Transfer was already accepted'
+            }, 200)
+        }
+
         if (transfer.status !== 'pending') {
-            logger.warn('Transfer already processed', { status: transfer.status })
+            logger.warn('Transfer not in pending state', { status: transfer.status })
             return jsonResponse({
                 error: 'Transfer already processed',
                 status: transfer.status
             }, 409)
         }
 
-        // 6. CHECK EXPIRY
+        // 6. CHECK RECIPIENT EMAIL MATCH
+        // Transfer is bedoeld voor specifieke ontvanger - verifieer email match
+        if (transfer.to_email && user!.email?.toLowerCase() !== transfer.to_email.toLowerCase()) {
+            logger.warn('Email mismatch', { expected: transfer.to_email, actual: user!.email })
+            return errorResponse(
+                'This transfer was intended for a different recipient',
+                'RECIPIENT_EMAIL_MISMATCH',
+                403
+            )
+        }
+
+        // 7. CHECK EXPIRY
         if (new Date(transfer.expires_at) < new Date()) {
             logger.warn('Transfer expired')
 
             await supabaseAdmin
                 .from('ticket_transfers')
-                .update({ status: 'expired' })
+                .update({ status: 'expired', updated_at: new Date().toISOString() })
                 .eq('id', transfer.id)
 
             return errorResponse('Transfer expired', 'TRANSFER_EXPIRED', 410)
         }
 
-        // 7. RESOLVE TO_PARTICIPANT_ID
+        // 8. RESOLVE TO_PARTICIPANT_ID
         let toParticipantId = transfer.to_participant_id
 
         if (!toParticipantId) {
-            // Create participant for new user
-            logger.info('Creating new participant for recipient')
-
-            const { data: newParticipant, error: participantError } = await supabaseAdmin
+            // Try to find existing participant for this user
+            const { data: existingParticipant } = await supabaseAdmin
                 .from('participants')
-                .insert({
-                    user_id: user!.id,
-                    email: transfer.to_email,
-                    first_name: transfer.to_email.split('@')[0],
-                    last_name: 'User'
-                })
                 .select('id')
-                .single()
+                .eq('user_id', user!.id)
+                .limit(1)
+                .maybeSingle()
 
-            if (participantError) {
-                logger.error('Failed to create participant', participantError)
-                return errorResponse('Failed to create participant', 'PARTICIPANT_CREATION_FAILED', 500)
+            if (existingParticipant) {
+                toParticipantId = existingParticipant.id
+                logger.info('Found existing participant', toParticipantId)
+            } else {
+                // Create participant for new user
+                logger.info('Creating new participant for recipient')
+
+                const { data: newParticipant, error: participantError } = await supabaseAdmin
+                    .from('participants')
+                    .insert({
+                        user_id: user!.id,
+                        email: transfer.to_email || user!.email,
+                        first_name: user!.user_metadata?.first_name || '',
+                        last_name: user!.user_metadata?.last_name || ''
+                    })
+                    .select('id')
+                    .single()
+
+                if (participantError) {
+                    logger.error('Failed to create participant', participantError)
+                    return errorResponse('Failed to create participant', 'PARTICIPANT_CREATION_FAILED', 500)
+                }
+
+                toParticipantId = newParticipant.id
+                logger.info('Participant created', toParticipantId)
             }
-
-            toParticipantId = newParticipant.id
-            logger.info('Participant created', toParticipantId)
         } else {
             // Verify user owns the to_participant
             const { data: toParticipant } = await supabaseAdmin
@@ -143,7 +180,7 @@ serve(async (req: Request) => {
             logger.info('Participant verified', toParticipantId)
         }
 
-        // 8. CALL ATOMIC RPC (handles ownership transfer + status update)
+        // 9. CALL ATOMIC RPC (handles ownership transfer + status update)
         logger.info('Completing transfer via RPC')
 
         const { data: rpcResult, error: rpcError } = await supabaseAdmin
